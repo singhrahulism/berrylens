@@ -1,0 +1,25 @@
+{
+  "name": "berrylens-cli",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "berrylens": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.tsx"
+  },
+  "dependencies": {
+    "@berrylens/protocol": "0.0.1",
+    "ink": "^5.0.1",
+    "react": "^18.3.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/ws": "^8.5.13",
+    "ink-testing-library": "^4.0.0"
+  }
+}

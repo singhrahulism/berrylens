@@ -1,0 +1,25 @@
+{
+  "name": "berrylens-workspace",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "example"
+  ],
+  "scripts": {
+    "build": "npm run build -w packages/protocol && npm run build -w packages/sdk && npm run build -w packages/cli",
+    "dev:cli": "npm run dev -w packages/cli",
+    "smoke": "tsx scripts/smoke-app.ts",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "tsx": "^4.19.2",
+    "vitest": "^2.1.4",
+    "@types/react": "^18.3.12"
+  },
+  "overrides": {
+    "ink": {
+      "react": "^18.3.1"
+    }
+  }
+}
