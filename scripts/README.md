@@ -59,6 +59,49 @@ scripts/check-file-size.sh
 
 Prints the offending files and exits 1 if any are found, otherwise exits 0.
 
+## live-verify.py
+
+Drives the actual compiled CLI binary inside a real pseudo-terminal (Python's
+stdlib `pty` module) and asserts on its rendered output. This is the
+automated form of the manual pty checks used during development: it runs the
+real binary under a genuine TTY (Ink sees real `isTTY`, real raw mode, a real
+terminal size), not a mocked renderer, so it catches things
+`ink-testing-library` cannot, in particular anything about ref-forwarding,
+raw-mode key handling, or actual ANSI output.
+
+Python (not Node or bash) because a real pty needs either a native addon
+(`node-pty`, not a project dependency) or a language with pty support built
+into its standard library. `python3` is assumed to be present (macOS ships
+it); no pip packages are required. Event injection reuses `packages/cli`'s
+existing `ws` dependency via a small committed helper
+(`scripts/lib/ws-inject.cjs`), so no new npm dependency either.
+
+```bash
+python3 scripts/live-verify.py --scenario scripts/scenarios/timeline.json
+python3 scripts/live-verify.py --scenario scripts/scenarios/network-detail.json --skip-build --port 7951
+```
+
+A scenario is a JSON file with two optional top-level keys:
+
+- `events`: a list of protocol messages (`{"type": "hello", ...}`,
+  `{"type": "event", "event": {...InspectorEvent}}`) sent to the running CLI
+  before any keys, standing in for a connected app. Omit for dashboard-only
+  checks that don't need data.
+- `steps`: a list of `{"keys": [...], "wait": <seconds>, "expect": [...],
+  "not_expect": [...]}`. Each step sends its keys in order (named keys:
+  `tab`, `shift+tab`, `enter`/`return`, `esc`/`escape`, `up`/`down`/`left`/`right`;
+  anything else is sent as a literal character), waits, then checks that
+  every `expect` substring appeared and every `not_expect` substring did not,
+  in the output produced since that step started (ANSI codes stripped
+  first).
+
+Exits 0 and prints `PASS` if every step's assertions held, otherwise prints
+each failing assertion and exits 1. Builds `berrylens-cli` first by default;
+pass `--skip-build` to run against the existing `dist/` as is. `--port`
+defaults to 7950 (pick a free one if running scenarios in parallel or if
+that port is already in use by another running CLI instance). See
+`scripts/scenarios/` for working examples.
+
 ## smoke-app.ts
 
 A stand-in for a React Native app, used to verify the SDK to CLI pipeline

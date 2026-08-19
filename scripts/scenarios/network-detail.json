@@ -1,0 +1,58 @@
+{
+  "events": [
+    {"type": "hello", "appName": "verify", "platform": "ios"},
+    {
+      "type": "event",
+      "event": {
+        "id": "net1",
+        "timestamp": 0,
+        "category": "network",
+        "label": "POST /wave 201 42ms",
+        "durationMs": 42,
+        "data": {
+          "method": "POST",
+          "url": "https://api.example.com/wave?x=1",
+          "status": 201,
+          "ok": true,
+          "requestHeaders": {"content-type": "application/json"},
+          "requestBody": {"userId": "abc123", "note": "hi there"},
+          "responseHeaders": {"content-type": "application/json"},
+          "responseBody": {"success": true, "waveId": "w1", "nested": {"a": 1, "b": 2}}
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "keys": ["tab", "tab", "enter"],
+      "wait": 0.8,
+      "expect": ["REQUEST", "RESPONSE"]
+    },
+    {
+      "keys": ["tab"],
+      "wait": 0.5,
+      "expect": ["REQUEST BODY"]
+    },
+    {
+      "keys": ["tab"],
+      "wait": 0.5,
+      "expect": ["RESPONSE (201)"]
+    },
+    {
+      "keys": ["v"],
+      "wait": 0.5,
+      "expect": ["tree view"]
+    },
+    {
+      "keys": ["v"],
+      "wait": 0.4,
+      "expect": ["raw JSON"]
+    },
+    {
+      "keys": ["esc"],
+      "wait": 0.6,
+      "expect": ["API CALLS"],
+      "not_expect": ["REQUEST"]
+    }
+  ]
+}

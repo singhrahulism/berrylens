@@ -1,0 +1,16 @@
+{
+  "steps": [
+    {
+      "keys": ["t"],
+      "wait": 0.8,
+      "expect": ["TIMELINE"],
+      "not_expect": ["API CALLS"]
+    },
+    {
+      "keys": ["d"],
+      "wait": 0.8,
+      "expect": ["API CALLS", "GLOBAL STATE"],
+      "not_expect": ["TIMELINE"]
+    }
+  ]
+}
