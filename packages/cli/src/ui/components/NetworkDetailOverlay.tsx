@@ -1,11 +1,12 @@
-import React, { useState } from "react";
-import { Box, Text, useInput } from "ink";
+import React, { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { Box, Text } from "ink";
 import type { InspectorEvent } from "@berrylens/protocol";
-import { JsonViewer } from "./JsonViewer.js";
-import { ScrollableLines } from "./ScrollableLines.js";
-import { CorrelationStrip } from "./CorrelationStrip.js";
-import { CORRELATION_STRIP_ROWS, computeNetworkDetailLayout } from "../layout.js";
-import { FOCUSED_BORDER_COLOR, UNFOCUSED_BORDER_COLOR } from "../theme.js";
+import { JsonViewer } from "./JsonViewer";
+import { ScrollableLines } from "./ScrollableLines";
+import { CorrelationStrip } from "./CorrelationStrip";
+import { CORRELATION_STRIP_ROWS, computeNetworkDetailLayout } from "../layout";
+import { FOCUSED_BORDER_COLOR, NETWORK_DETAIL_BORDER_COLOR, UNFOCUSED_BORDER_COLOR } from "../theme";
+import type { DetailHandle } from "../keymap";
 
 export interface NetworkDetailOverlayProps {
   event: InspectorEvent;
@@ -34,19 +35,35 @@ const PANEL_ORDER: SubPanel[] = ["A", "B", "C"];
  * Three-panel layout: A (request overview: method/url/status/duration +
  * request headers) takes the top 25% of height, full width; B and C split
  * the remaining 75% side by side. `Tab` cycles keyboard focus between them —
- * only the focused panel's scroll/tree handler is active, so a key never
- * gets handled by two panels at once. Each panel is independently windowed
+ * `detail-panel-focus` is handled right here (only this overlay has
+ * sub-panels), every other resolved `DetailAction` is forwarded to whichever
+ * panel is currently focused via its own `DetailHandle` ref, so a key never
+ * gets applied to two panels at once. Each panel is independently windowed
  * to its own computed height, so a long response body scrolls inside its
  * own panel rather than pushing the whole terminal into scroll.
  */
-export function NetworkDetailOverlay({ event, indexInfo, availableHeight, allEvents }: NetworkDetailOverlayProps) {
+export const NetworkDetailOverlay = forwardRef<DetailHandle, NetworkDetailOverlayProps>(function NetworkDetailOverlay(
+  { event, indexInfo, availableHeight, allEvents },
+  ref,
+) {
   const [focusedPanel, setFocusedPanel] = useState<SubPanel>("C");
   const data = event.data as NetworkEventData;
   const layout = computeNetworkDetailLayout(availableHeight);
 
-  useInput((_input, key) => {
-    if (key.tab) setFocusedPanel((current) => nextPanel(current, key.shift));
-  });
+  const panelARef = useRef<DetailHandle>(null);
+  const panelBRef = useRef<DetailHandle>(null);
+  const panelCRef = useRef<DetailHandle>(null);
+
+  useImperativeHandle(ref, () => ({
+    handleDetailAction(action) {
+      if (action.type === "detail-panel-focus") {
+        setFocusedPanel((current) => nextPanel(current, action.direction === -1));
+        return;
+      }
+      const panelRef = focusedPanel === "A" ? panelARef : focusedPanel === "B" ? panelBRef : panelCRef;
+      panelRef.current?.handleDetailAction(action);
+    },
+  }));
 
   const hasRequestBody = data.requestBody !== undefined;
   const panelBTitle = hasRequestBody ? "REQUEST BODY" : "QUERY PARAMS";
@@ -56,7 +73,7 @@ export function NetworkDetailOverlay({ event, indexInfo, availableHeight, allEve
   const hasResponseHeaders = Boolean(data.responseHeaders && Object.keys(data.responseHeaders).length > 0);
 
   return (
-    <Box flexDirection="column" flexGrow={1} borderStyle="double" borderColor="cyan" paddingX={1}>
+    <Box flexDirection="column" flexGrow={1} borderStyle="double" borderColor={NETWORK_DETAIL_BORDER_COLOR} paddingX={1}>
       <Box
         flexDirection="column"
         height={layout.requestPanelRows}
@@ -68,7 +85,7 @@ export function NetworkDetailOverlay({ event, indexInfo, availableHeight, allEve
         <Text bold color={panelBorderColor(focusedPanel === "A")}>
           REQUEST
         </Text>
-        <ScrollableLines lines={requestLines} maxVisibleRows={layout.requestContentRows} active={focusedPanel === "A"} />
+        <ScrollableLines ref={panelARef} lines={requestLines} maxVisibleRows={layout.requestContentRows} />
       </Box>
 
       <Box flexDirection="row" height={layout.bodyPanelRows} overflow="hidden">
@@ -83,12 +100,7 @@ export function NetworkDetailOverlay({ event, indexInfo, availableHeight, allEve
           <Text bold color={panelBorderColor(focusedPanel === "B")}>
             {panelBTitle}
           </Text>
-          <JsonViewer
-            key={`${event.id}-b`}
-            data={panelBData}
-            maxVisibleRows={layout.bodyContentRows}
-            active={focusedPanel === "B"}
-          />
+          <JsonViewer ref={panelBRef} key={`${event.id}-b`} data={panelBData} maxVisibleRows={layout.bodyContentRows} />
         </Box>
 
         <Box
@@ -104,10 +116,10 @@ export function NetworkDetailOverlay({ event, indexInfo, availableHeight, allEve
           </Text>
           {hasResponseHeaders ? <Text dimColor>headers: {JSON.stringify(data.responseHeaders)}</Text> : null}
           <JsonViewer
+            ref={panelCRef}
             key={`${event.id}-c`}
             data={data.responseBody}
             maxVisibleRows={layout.bodyContentRows - (hasResponseHeaders ? 1 : 0)}
-            active={focusedPanel === "C"}
           />
         </Box>
       </Box>
@@ -124,7 +136,7 @@ export function NetworkDetailOverlay({ event, indexInfo, availableHeight, allEve
       <Text dimColor>esc back   tab switch panel   d dump   y curl   n/p next/prev   {indexInfo}</Text>
     </Box>
   );
-}
+});
 
 function nextPanel(current: SubPanel, backwards?: boolean): SubPanel {
   const index = PANEL_ORDER.indexOf(current);

@@ -1,9 +1,9 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { InspectorEvent } from "@berrylens/protocol";
-import { findNearbyEvents } from "../correlation.js";
-import { CATEGORY_COLORS } from "../theme.js";
-import { CORRELATION_WINDOW_MS } from "../layout.js";
+import { findNearbyEvents } from "../views/correlation";
+import { CATEGORY_COLORS } from "../theme";
+import { CORRELATION_WINDOW_MS } from "../layout";
 
 export interface CorrelationStripProps {
   allEvents: InspectorEvent[];

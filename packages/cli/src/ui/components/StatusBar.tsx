@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
-import type { MetroTarget } from "../../metroPairing.js";
-import { describePairing } from "../../metroPairing.js";
+import type { MetroTarget } from "../../metroPairing";
+import { describePairing } from "../../metroPairing";
 
 export interface StatusBarProps {
   connectionStatus: "waiting" | "connected" | "disconnected";

@@ -1,8 +1,8 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { InspectorEvent } from "@berrylens/protocol";
-import { CATEGORY_COLORS } from "../theme.js";
-import { computeScrollWindow } from "../layout.js";
+import { CATEGORY_COLORS, SEARCH_BORDER_COLOR } from "../theme";
+import { computeScrollWindow } from "../layout";
 
 export interface SearchOverlayProps {
   query: string;
@@ -19,7 +19,7 @@ export function SearchOverlay({ query, matches, cursor, maxVisibleRows }: Search
   const scrolled = matches.length > maxVisibleRows;
 
   return (
-    <Box flexDirection="column" flexGrow={1} borderStyle="double" borderColor="magenta" paddingX={1}>
+    <Box flexDirection="column" flexGrow={1} borderStyle="double" borderColor={SEARCH_BORDER_COLOR} paddingX={1}>
       <Text bold>SEARCH (all categories)</Text>
       <Text>
         {"> "}

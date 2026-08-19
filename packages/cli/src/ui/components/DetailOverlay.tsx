@@ -1,9 +1,11 @@
-import React from "react";
+import React, { forwardRef, useImperativeHandle, useRef } from "react";
 import { Box, Text } from "ink";
 import type { InspectorEvent } from "@berrylens/protocol";
-import { JsonViewer } from "./JsonViewer.js";
-import { CorrelationStrip } from "./CorrelationStrip.js";
-import { CORRELATION_STRIP_ROWS, visibleRowsForGenericDetail } from "../layout.js";
+import { JsonViewer } from "./JsonViewer";
+import { CorrelationStrip } from "./CorrelationStrip";
+import { CORRELATION_STRIP_ROWS, visibleRowsForGenericDetail } from "../layout";
+import { GENERIC_DETAIL_BORDER_COLOR } from "../theme";
+import type { DetailHandle } from "../keymap";
 
 export interface DetailOverlayProps {
   event: InspectorEvent;
@@ -20,15 +22,25 @@ export interface DetailOverlayProps {
  * the structured `NetworkDetailOverlay` instead. Renders in place of the
  * pane grid (not alongside it) so it always has the full terminal height.
  */
-export function DetailOverlay({ event, indexInfo, availableHeight, allEvents }: DetailOverlayProps) {
+export const DetailOverlay = forwardRef<DetailHandle, DetailOverlayProps>(function DetailOverlay(
+  { event, indexInfo, availableHeight, allEvents },
+  ref,
+) {
+  const treeRef = useRef<DetailHandle>(null);
+  useImperativeHandle(ref, () => ({
+    handleDetailAction(action) {
+      treeRef.current?.handleDetailAction(action);
+    },
+  }));
+
   return (
-    <Box flexDirection="column" flexGrow={1} borderStyle="double" borderColor="white" paddingX={1}>
+    <Box flexDirection="column" flexGrow={1} borderStyle="double" borderColor={GENERIC_DETAIL_BORDER_COLOR} paddingX={1}>
       <Text bold>
         {event.category.toUpperCase()} › {event.label}
       </Text>
       <Text dimColor>{new Date(event.timestamp).toISOString()}</Text>
       <Box marginTop={1} flexDirection="column" flexGrow={1}>
-        <JsonViewer key={event.id} data={event.data} maxVisibleRows={visibleRowsForGenericDetail(availableHeight)} />
+        <JsonViewer ref={treeRef} key={event.id} data={event.data} maxVisibleRows={visibleRowsForGenericDetail(availableHeight)} />
       </Box>
       <Box marginTop={1}>
         <CorrelationStrip key={`${event.id}-nearby`} allEvents={allEvents} center={event} maxRows={CORRELATION_STRIP_ROWS} />
@@ -38,4 +50,4 @@ export function DetailOverlay({ event, indexInfo, availableHeight, allEvents }: 
       </Box>
     </Box>
   );
-}
+});

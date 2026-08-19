@@ -1,8 +1,8 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { InspectorEvent } from "@berrylens/protocol";
-import { CATEGORY_COLORS, FOCUSED_BORDER_COLOR, UNFOCUSED_BORDER_COLOR } from "../theme.js";
-import { computeScrollWindow } from "../layout.js";
+import { CATEGORY_COLORS, FOCUSED_BORDER_COLOR, UNFOCUSED_BORDER_COLOR } from "../theme";
+import { computeScrollWindow } from "../layout";
 
 export interface PaneProps {
   title: string;

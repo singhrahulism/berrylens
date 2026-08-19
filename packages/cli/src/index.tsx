@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import React from "react";
 import { render } from "ink";
-import { InspectorServer } from "./server.js";
-import { parseMetroUrl } from "./metroPairing.js";
-import { App } from "./ui/App.js";
+import { InspectorServer } from "./server";
+import { parseMetroUrl } from "./metroPairing";
+import { App } from "./ui/App";
 
 const port = Number(process.env.BERRYLENS_PORT ?? 7890);
 

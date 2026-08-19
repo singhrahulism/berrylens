@@ -1,12 +1,11 @@
-import React, { useMemo, useState } from "react";
-import { Box, Text, useInput } from "ink";
-import { flattenVisibleNodes, ROOT_PATH } from "../json-tree.js";
-import { computeScrollWindow } from "../layout.js";
+import React, { forwardRef, useImperativeHandle, useMemo, useState } from "react";
+import { Box, Text } from "ink";
+import { flattenVisibleNodes, ROOT_PATH } from "../views/json-tree";
+import { computeScrollWindow } from "../layout";
+import type { DetailHandle } from "../keymap";
 
 export interface JsonViewerProps {
   data: unknown;
-  /** Set false if another sub-panel owns the keyboard instead (only one should be active at a time). */
-  active?: boolean;
   /** How many content rows actually fit, computed by the caller from the live terminal height. */
   maxVisibleRows: number;
 }
@@ -17,11 +16,12 @@ export interface JsonViewerProps {
  * starts collapsed, so a big payload doesn't dump as an unreadable wall of
  * text by default but nothing is hidden or truncated: it's all still there,
  * just collapsed until you ask for it. Both modes are windowed to
- * `maxVisibleRows` and scroll with the cursor — previously raw mode had no
- * height bound at all, so a long body just overflowed into the terminal's
- * own scroll rather than scrolling inside its own panel.
+ * `maxVisibleRows` and scroll with the cursor. Expand/cursor/mode state stays
+ * local to this instance (so two trees open at once, e.g. panels B and C,
+ * never share state), but keystrokes are resolved centrally and forwarded in
+ * via `DetailHandle`, not read here directly.
  */
-export function JsonViewer({ data, active = true, maxVisibleRows }: JsonViewerProps) {
+export const JsonViewer = forwardRef<DetailHandle, JsonViewerProps>(function JsonViewer({ data, maxVisibleRows }, ref) {
   const [mode, setMode] = useState<"tree" | "raw">("tree");
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set([ROOT_PATH]));
   const [cursorIndex, setCursorIndex] = useState(0);
@@ -36,32 +36,31 @@ export function JsonViewer({ data, active = true, maxVisibleRows }: JsonViewerPr
   const maxRawScroll = Math.max(0, rawLines.length - maxVisibleRows);
   const clampedRawScroll = Math.max(0, Math.min(rawScroll, maxRawScroll));
 
-  useInput(
-    (input, key) => {
-      if (input === "v") {
+  useImperativeHandle(ref, () => ({
+    handleDetailAction(action) {
+      if (action.type === "detail-toggle-raw") {
         setMode((current) => (current === "tree" ? "raw" : "tree"));
         return;
       }
 
       if (mode === "raw") {
-        if (key.downArrow || input === "j") setRawScroll((s) => Math.min(maxRawScroll, s + 1));
-        else if (key.upArrow || input === "k") setRawScroll((s) => Math.max(0, s - 1));
+        if (action.type === "detail-move") {
+          setRawScroll((s) => (action.direction === 1 ? Math.min(maxRawScroll, s + 1) : Math.max(0, s - 1)));
+        }
         return;
       }
 
-      if (key.downArrow || input === "j") {
-        setCursorIndex((index) => Math.min(flatNodes.length - 1, index + 1));
-        return;
-      }
-      if (key.upArrow || input === "k") {
-        setCursorIndex((index) => Math.max(0, index - 1));
+      if (action.type === "detail-move") {
+        setCursorIndex((index) =>
+          action.direction === 1 ? Math.min(flatNodes.length - 1, index + 1) : Math.max(0, index - 1),
+        );
         return;
       }
 
       const current = flatNodes[clampedCursor];
       if (!current?.isContainer) return;
 
-      if (key.return) {
+      if (action.type === "detail-toggle-node") {
         // enter toggles (expand if collapsed, collapse if already open) —
         // arrows stay directional (right=expand, left=collapse) for anyone
         // used to that convention, enter is the "just do the obvious thing" key
@@ -73,11 +72,11 @@ export function JsonViewer({ data, active = true, maxVisibleRows }: JsonViewerPr
         });
         return;
       }
-      if (key.rightArrow || input === "l") {
+      if (action.type === "detail-expand") {
         if (!current.isExpanded) setExpandedPaths((prev) => new Set(prev).add(current.path));
         return;
       }
-      if ((key.leftArrow || input === "h") && current.isExpanded) {
+      if (action.type === "detail-collapse" && current.isExpanded) {
         setExpandedPaths((prev) => {
           const next = new Set(prev);
           next.delete(current.path);
@@ -85,8 +84,7 @@ export function JsonViewer({ data, active = true, maxVisibleRows }: JsonViewerPr
         });
       }
     },
-    { isActive: active },
-  );
+  }));
 
   if (mode === "raw") {
     const scrolled = rawLines.length > maxVisibleRows;
@@ -122,4 +120,4 @@ export function JsonViewer({ data, active = true, maxVisibleRows }: JsonViewerPr
       ))}
     </Box>
   );
-}
+});

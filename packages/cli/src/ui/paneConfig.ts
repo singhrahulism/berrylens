@@ -48,6 +48,10 @@ export function focusOrder(layout: PaneRow[]): string[] {
   return layout.flatMap((row) => row.paneIds);
 }
 
+/** `Tab`/`Shift+Tab` cycle order — the one source of truth for it, shared by
+ * `appState.ts` (initial focus) and `keyHandler.ts` (`focus-next`/`focus-prev`). */
+export const FOCUS_ORDER: string[] = focusOrder(DEFAULT_LAYOUT);
+
 export function paneById(panes: PaneDefinition[], id: string): PaneDefinition | undefined {
   return panes.find((pane) => pane.id === id);
 }

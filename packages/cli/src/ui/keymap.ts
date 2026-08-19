@@ -30,7 +30,44 @@ export type Action =
   | { type: "clear" }
   | { type: "view-timeline" }
   | { type: "view-dashboard" }
+  | DetailAction
   | { type: "quit" };
+
+/**
+ * Keystrokes that navigate *inside* an open detail view (the JSON tree, the
+ * network A/B/C sub-panels, raw-JSON scroll) — resolved centrally here like
+ * every other keybinding, but applied by whichever detail component is
+ * currently mounted via `DetailHandle`, not dispatched through the reducer:
+ * this is UI-local state (expand-paths, cursor, scroll offset), not app state.
+ */
+export type DetailAction =
+  | { type: "detail-move"; direction: 1 | -1 }
+  | { type: "detail-expand" }
+  | { type: "detail-collapse" }
+  | { type: "detail-toggle-node" }
+  | { type: "detail-toggle-raw" }
+  | { type: "detail-panel-focus"; direction: 1 | -1 };
+
+const DETAIL_ACTION_TYPES = new Set<Action["type"]>([
+  "detail-move",
+  "detail-expand",
+  "detail-collapse",
+  "detail-toggle-node",
+  "detail-toggle-raw",
+  "detail-panel-focus",
+]);
+
+export function isDetailAction(action: Action): action is DetailAction {
+  return DETAIL_ACTION_TYPES.has(action.type);
+}
+
+/** Implemented by every detail-view component (`DetailOverlay`,
+ * `NetworkDetailOverlay`, `StateDetailOverlay`) via `useImperativeHandle`, so
+ * `App.tsx`'s single `useInput` can forward a resolved `DetailAction` to
+ * whichever one is currently mounted without either side reading raw keys. */
+export interface DetailHandle {
+  handleDetailAction(action: DetailAction): void;
+}
 
 /**
  * Single source of truth for keybindings, per mode — nothing else in the UI
@@ -59,6 +96,14 @@ export function resolveAction(mode: Mode, input: string, key: Key): Action | nul
 
   if (mode === "detail") {
     if (key.escape) return { type: "close-detail" };
+    if (key.tab && key.shift) return { type: "detail-panel-focus", direction: -1 };
+    if (key.tab) return { type: "detail-panel-focus", direction: 1 };
+    if (key.upArrow || input === "k") return { type: "detail-move", direction: -1 };
+    if (key.downArrow || input === "j") return { type: "detail-move", direction: 1 };
+    if (key.rightArrow || input === "l") return { type: "detail-expand" };
+    if (key.leftArrow || input === "h") return { type: "detail-collapse" };
+    if (key.return) return { type: "detail-toggle-node" };
+    if (input === "v") return { type: "detail-toggle-raw" };
     if (input === "d") return { type: "dump" };
     if (input === "y") return { type: "curl" };
     if (input === "n") return { type: "step-detail", direction: 1 };

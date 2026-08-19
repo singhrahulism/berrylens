@@ -1,9 +1,11 @@
-import React from "react";
+import React, { forwardRef, useImperativeHandle, useRef } from "react";
 import { Box, Text } from "ink";
 import type { InspectorEvent } from "@berrylens/protocol";
-import { JsonViewer } from "./JsonViewer.js";
-import { CorrelationStrip } from "./CorrelationStrip.js";
-import { CORRELATION_STRIP_ROWS, STATE_DIFF_ROWS, visibleRowsForStateDetail } from "../layout.js";
+import { JsonViewer } from "./JsonViewer";
+import { CorrelationStrip } from "./CorrelationStrip";
+import { CORRELATION_STRIP_ROWS, STATE_DIFF_ROWS, visibleRowsForStateDetail } from "../layout";
+import { STATE_DETAIL_BORDER_COLOR } from "../theme";
+import type { DetailHandle } from "../keymap";
 
 export interface StateDetailOverlayProps {
   event: InspectorEvent;
@@ -23,15 +25,24 @@ interface DiffEntry {
  * usual collapsible tree, but the diff is the actual point: "what changed",
  * not "here are two full trees, go compare them yourself".
  */
-export function StateDetailOverlay({ event, indexInfo, availableHeight, allEvents }: StateDetailOverlayProps) {
+export const StateDetailOverlay = forwardRef<DetailHandle, StateDetailOverlayProps>(function StateDetailOverlay(
+  { event, indexInfo, availableHeight, allEvents },
+  ref,
+) {
   const diff = ((event.data as { diff?: Record<string, DiffEntry> }).diff ?? {}) as Record<string, DiffEntry>;
   const diffEntries = Object.entries(diff);
   const maxDiffRows = Math.max(0, STATE_DIFF_ROWS - 1);
   const shownDiff = diffEntries.slice(0, maxDiffRows);
   const hiddenDiffCount = diffEntries.length - shownDiff.length;
+  const treeRef = useRef<DetailHandle>(null);
+  useImperativeHandle(ref, () => ({
+    handleDetailAction(action) {
+      treeRef.current?.handleDetailAction(action);
+    },
+  }));
 
   return (
-    <Box flexDirection="column" flexGrow={1} borderStyle="double" borderColor="magenta" paddingX={1}>
+    <Box flexDirection="column" flexGrow={1} borderStyle="double" borderColor={STATE_DETAIL_BORDER_COLOR} paddingX={1}>
       <Text bold>
         {event.category.toUpperCase()} › {event.label}
       </Text>
@@ -59,7 +70,7 @@ export function StateDetailOverlay({ event, indexInfo, availableHeight, allEvent
         <Text bold dimColor>
           FULL STATE
         </Text>
-        <JsonViewer key={event.id} data={event.data} maxVisibleRows={visibleRowsForStateDetail(availableHeight)} />
+        <JsonViewer ref={treeRef} key={event.id} data={event.data} maxVisibleRows={visibleRowsForStateDetail(availableHeight)} />
       </Box>
 
       <Box marginTop={1}>
@@ -76,7 +87,7 @@ export function StateDetailOverlay({ event, indexInfo, availableHeight, allEvent
       </Box>
     </Box>
   );
-}
+});
 
 function formatValue(value: unknown): string {
   if (value === undefined) return "undefined";

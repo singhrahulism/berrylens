@@ -9,6 +9,7 @@
     "build": "npm run build -w packages/protocol && npm run build -w packages/sdk && npm run build -w packages/cli",
     "dev:cli": "npm run dev -w packages/cli",
     "smoke": "tsx scripts/smoke-app.ts",
+    "generate-packages": "bash scripts/generate-packages.sh",
     "test": "vitest run"
   },
   "devDependencies": {
