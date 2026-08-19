@@ -4,7 +4,18 @@ import type { Key } from "ink";
 import type { Category, HelloMessage, InspectorEvent } from "@berrylens/protocol";
 import type { ConnectionInfo, InspectorServer } from "../server.js";
 import type { MetroTarget } from "../metroPairing.js";
-import { DEFAULT_LAYOUT, DEFAULT_PANES, focusOrder, paneById, rowIndexForPane, siblingsInRow } from "./paneConfig.js";
+import {
+  ALL_PANES,
+  DEFAULT_LAYOUT,
+  DEFAULT_PANES,
+  TIMELINE_PANE,
+  focusOrder,
+  paneById,
+  rowIndexForPane,
+  siblingsInRow,
+  type PaneDefinition,
+} from "./paneConfig.js";
+import { sortEventsChronologically } from "./timeline.js";
 import {
   FOOTER_ROWS,
   STATUS_BAR_ROWS,
@@ -59,6 +70,10 @@ interface AppState {
   /** The OTHER end of a Shift+j/k range selection in the focused pane, from-end indexed
    * like `selectedFromEnd` — null when no range is active (plain single selection). */
   rangeAnchor: number | null;
+  /** Top-level view: the dashboard grid, or the full-screen cross-category timeline (Phase 10). */
+  view: "dashboard" | "timeline";
+  /** `focusedPaneId` to restore when leaving the timeline view back to the dashboard. */
+  savedFocusedPaneId: string;
 }
 
 type AppEvent =
@@ -89,6 +104,8 @@ const initialState: AppState = {
   searchCursor: 0,
   errorFlashActive: false,
   rangeAnchor: null,
+  view: "dashboard",
+  savedFocusedPaneId: FOCUS_ORDER[0],
 };
 
 export function positiveOr(value: number | undefined, fallback: number): number {
@@ -109,11 +126,21 @@ function hasDiff(event: InspectorEvent): boolean {
   return typeof diff === "object" && diff !== null && Object.keys(diff).length > 0;
 }
 
+/** Events for a given pane, chronologically sorted when it's the timeline
+ * pseudo-pane (Phase 10) — every other pane's events are already in arrival
+ * order, so this is a no-op for them; kept as one function so the ordering
+ * used for on-screen rendering and for selection/detail-lookup math never
+ * diverges. */
+function listForPane(state: AppState, pane: PaneDefinition): InspectorEvent[] {
+  const list = eventsForPane(state.events, pane.categories, state.appliedFilters[pane.id]);
+  return pane.id === TIMELINE_PANE.id ? sortEventsChronologically(list) : list;
+}
+
 /** The event currently shown in the detail view — reused by both the dump and curl-export key handlers. */
 function selectedDetailEvent(state: AppState): InspectorEvent | undefined {
-  const pane = paneById(DEFAULT_PANES, state.focusedPaneId);
+  const pane = paneById(ALL_PANES, state.focusedPaneId);
   if (!pane) return undefined;
-  const list = eventsForPane(state.events, pane.categories, state.appliedFilters[state.focusedPaneId]);
+  const list = listForPane(state, pane);
   return list[list.length - 1 - (state.selectedFromEnd[state.focusedPaneId] ?? 0)];
 }
 
@@ -165,9 +192,9 @@ function handleKey(state: AppState, input: string, key: Key): AppState {
       };
     }
     case "move-selection": {
-      const pane = paneById(DEFAULT_PANES, state.focusedPaneId);
+      const pane = paneById(ALL_PANES, state.focusedPaneId);
       if (!pane) return state;
-      const list = eventsForPane(state.events, pane.categories, state.appliedFilters[state.focusedPaneId]);
+      const list = listForPane(state, pane);
       const current = state.selectedFromEnd[state.focusedPaneId] ?? 0;
       // up (-1) means "older", which increases the from-end offset — bounded
       // by the pane's actual event count, or this can climb past the oldest
@@ -181,9 +208,9 @@ function handleKey(state: AppState, input: string, key: Key): AppState {
       };
     }
     case "extend-selection": {
-      const pane = paneById(DEFAULT_PANES, state.focusedPaneId);
+      const pane = paneById(ALL_PANES, state.focusedPaneId);
       if (!pane) return state;
-      const list = eventsForPane(state.events, pane.categories, state.appliedFilters[state.focusedPaneId]);
+      const list = listForPane(state, pane);
       const current = state.selectedFromEnd[state.focusedPaneId] ?? 0;
       // first Shift+j/k in a fresh selection anchors the range at wherever
       // the cursor already was; subsequent presses just keep moving the
@@ -212,18 +239,18 @@ function handleKey(state: AppState, input: string, key: Key): AppState {
     case "open-detail": {
       // don't switch to a detail view with nothing to show — a focused pane
       // with zero (filtered) events would otherwise silently do nothing
-      const pane = paneById(DEFAULT_PANES, state.focusedPaneId);
+      const pane = paneById(ALL_PANES, state.focusedPaneId);
       if (!pane) return state;
-      const list = eventsForPane(state.events, pane.categories, state.appliedFilters[state.focusedPaneId]);
+      const list = listForPane(state, pane);
       if (list.length === 0) return state;
       return { ...state, mode: "detail" };
     }
     case "close-detail":
       return { ...state, mode: "normal" };
     case "step-detail": {
-      const pane = paneById(DEFAULT_PANES, state.focusedPaneId);
+      const pane = paneById(ALL_PANES, state.focusedPaneId);
       if (!pane) return state;
-      const list = eventsForPane(state.events, pane.categories, state.appliedFilters[state.focusedPaneId]);
+      const list = listForPane(state, pane);
       const current = state.selectedFromEnd[state.focusedPaneId] ?? 0;
       const next = Math.min(Math.max(0, list.length - 1), Math.max(0, current + resolved.direction));
       return { ...state, selectedFromEnd: { ...state.selectedFromEnd, [state.focusedPaneId]: next } };
@@ -288,6 +315,23 @@ function handleKey(state: AppState, input: string, key: Key): AppState {
     }
     case "clear":
       return { ...state, events: [], rangeAnchor: null };
+    case "view-timeline":
+      if (state.view === "timeline") return state;
+      return {
+        ...state,
+        view: "timeline",
+        savedFocusedPaneId: state.focusedPaneId,
+        focusedPaneId: TIMELINE_PANE.id,
+        rangeAnchor: null,
+      };
+    case "view-dashboard":
+      if (state.view === "dashboard") return state;
+      return {
+        ...state,
+        view: "dashboard",
+        focusedPaneId: state.savedFocusedPaneId,
+        rangeAnchor: null,
+      };
     default:
       return state;
   }
@@ -364,10 +408,8 @@ export function App({ server, metroTarget }: AppProps) {
     dispatch({ kind: "key", input, key });
   });
 
-  const focusedPane = paneById(DEFAULT_PANES, state.focusedPaneId);
-  const focusedList = focusedPane
-    ? eventsForPane(state.events, focusedPane.categories, state.appliedFilters[state.focusedPaneId])
-    : [];
+  const focusedPane = paneById(ALL_PANES, state.focusedPaneId);
+  const focusedList = focusedPane ? listForPane(state, focusedPane) : [];
   const detailEvent = focusedList[focusedList.length - 1 - (state.selectedFromEnd[state.focusedPaneId] ?? 0)];
   const rangeAnchorEvent =
     state.rangeAnchor !== null ? focusedList[focusedList.length - 1 - state.rangeAnchor] : undefined;
@@ -409,6 +451,24 @@ export function App({ server, metroTarget }: AppProps) {
         visibleRows={visibleRows}
         highlightFromTimestamp={isFocused ? undefined : highlightFrom}
         highlightToTimestamp={isFocused ? undefined : highlightTo}
+      />
+    );
+  }
+
+  function renderTimelinePane(width: number, height: number, visibleRows: number) {
+    const list = listForPane(state, TIMELINE_PANE);
+    return (
+      <Pane
+        key={TIMELINE_PANE.id}
+        title={TIMELINE_PANE.title}
+        filterActive={Boolean(state.appliedFilters[TIMELINE_PANE.id])}
+        events={list}
+        focused
+        selectedIndexFromEnd={state.selectedFromEnd[TIMELINE_PANE.id] ?? 0}
+        rangeAnchorFromEnd={state.rangeAnchor ?? undefined}
+        width={width}
+        height={height}
+        visibleRows={visibleRows}
       />
     );
   }
@@ -456,6 +516,10 @@ export function App({ server, metroTarget }: AppProps) {
           availableHeight={Math.max(1, terminalRows - STATUS_BAR_ROWS)}
           allEvents={state.events}
         />
+      ) : state.view === "timeline" ? (
+        <Box flexDirection="column" height={gridHeight} width={terminalColumns} overflow="hidden">
+          {renderTimelinePane(terminalColumns, gridHeight, visibleRowsForPaneHeight(gridHeight))}
+        </Box>
       ) : state.zoomedPaneId ? (
         <Box flexDirection="column" height={gridHeight} width={terminalColumns} overflow="hidden">
           {renderPane(state.zoomedPaneId, terminalColumns, gridHeight, visibleRowsForPaneHeight(gridHeight))}
@@ -488,7 +552,7 @@ export function App({ server, metroTarget }: AppProps) {
           ) : (
             <Text dimColor>
               Tab focus · j/k scroll · J/K extend range · +/- resize · z zoom · enter detail · / filter pane · ? search all ·
-              c clear · q quit
+              {state.view === "timeline" ? " d dashboard" : " t timeline"} · c clear · q quit
             </Text>
           )}
         </Box>

@@ -715,4 +715,70 @@ describe("App", () => {
 
     expect(lastFrame() ?? "").not.toContain("(range:");
   });
+
+  it("'t' opens a full-screen timeline showing events from every category in chronological order, 'd' returns to the dashboard", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    server.emit("event", makeEvent({ category: "network", label: "GET /nearby", timestamp: 2000 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "state", label: "locationStore updated", timestamp: 1000 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "navigation", label: "Map -> PersonSheet", timestamp: 3000 }));
+    await flush();
+
+    stdin.write("t");
+    await flush();
+    let frame = lastFrame() ?? "";
+
+    expect(frame).toContain("TIMELINE");
+    expect(frame).not.toContain("API CALLS");
+    expect(frame).not.toContain("GLOBAL STATE");
+    // chronological, not arrival order: state (1000) before network (2000) before nav (3000)
+    const stateIdx = frame.indexOf("locationStore updated");
+    const networkIdx = frame.indexOf("GET /nearby");
+    const navIdx = frame.indexOf("Map -> PersonSheet");
+    expect(stateIdx).toBeGreaterThan(-1);
+    expect(stateIdx).toBeLessThan(networkIdx);
+    expect(networkIdx).toBeLessThan(navIdx);
+
+    stdin.write("d");
+    await flush();
+    frame = lastFrame() ?? "";
+
+    expect(frame).toContain("API CALLS");
+    expect(frame).toContain("GLOBAL STATE");
+    expect(frame).not.toContain("TIMELINE");
+  });
+
+  it("uppercase 'T'/'D' also toggle the timeline (both cases work, not just lowercase)", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    stdin.write("T");
+    await flush();
+    expect(lastFrame() ?? "").toContain("TIMELINE");
+
+    stdin.write("D");
+    await flush();
+    expect(lastFrame() ?? "").not.toContain("TIMELINE");
+  });
+
+  it("Enter opens the detail view for the selected timeline event", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    server.emit("event", makeEvent({ category: "console", label: "connected to server", timestamp: 1000 }));
+    await flush();
+
+    stdin.write("t");
+    await flush();
+    stdin.write("\r");
+    await flush();
+
+    expect(lastFrame() ?? "").toContain("connected to server");
+  });
 });

@@ -25,6 +25,25 @@ export const DEFAULT_LAYOUT: PaneRow[] = [
   { paneIds: ["query", "console"] },
 ];
 
+export const ALL_CATEGORIES: Category[] = [
+  "network",
+  "console",
+  "error",
+  "state",
+  "query",
+  "navigation",
+  "storage",
+  "native",
+];
+
+/** Not part of `DEFAULT_LAYOUT`/the grid — a virtual full-screen pane for the
+ * timeline view (Phase 10), spanning every category. Kept as an ordinary
+ * `PaneDefinition` so it can reuse `paneById`/`eventsForPane`/selection state
+ * (keyed by pane id) exactly like every grid pane, instead of a parallel code path. */
+export const TIMELINE_PANE: PaneDefinition = { id: "timeline", title: "TIMELINE", categories: ALL_CATEGORIES };
+
+export const ALL_PANES: PaneDefinition[] = [...DEFAULT_PANES, TIMELINE_PANE];
+
 export function focusOrder(layout: PaneRow[]): string[] {
   return layout.flatMap((row) => row.paneIds);
 }

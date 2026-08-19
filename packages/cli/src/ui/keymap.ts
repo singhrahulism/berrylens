@@ -28,6 +28,8 @@ export type Action =
   | { type: "search-select" }
   | { type: "search-cancel" }
   | { type: "clear" }
+  | { type: "view-timeline" }
+  | { type: "view-dashboard" }
   | { type: "quit" };
 
 /**
@@ -85,6 +87,8 @@ export function resolveAction(mode: Mode, input: string, key: Key): Action | nul
   if (input === "/") return { type: "filter-start" };
   if (input === "?") return { type: "search-start" };
   if (input === "c") return { type: "clear" };
+  if (input === "T" || input === "t") return { type: "view-timeline" };
+  if (input === "D" || input === "d") return { type: "view-dashboard" };
   if (input === "q") return { type: "quit" };
   return null;
 }
