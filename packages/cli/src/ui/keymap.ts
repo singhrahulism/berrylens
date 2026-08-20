@@ -2,9 +2,16 @@ import type { Key } from "ink";
 
 export type Mode = "normal" | "filter" | "detail" | "search";
 
+export type PaneSplitDirection = "row" | "column";
+export type PaneFocusDirection = "left" | "right" | "up" | "down";
+
 export type Action =
   | { type: "focus-next" }
   | { type: "focus-prev" }
+  | { type: "move-focus"; direction: PaneFocusDirection }
+  | { type: "split-pane"; direction: PaneSplitDirection }
+  | { type: "close-pane" }
+  | { type: "open-view"; direction: PaneSplitDirection }
   | { type: "move-selection"; direction: 1 | -1 }
   | { type: "extend-selection"; direction: 1 | -1 }
   | { type: "jump-live" }
@@ -61,6 +68,34 @@ export function isDetailAction(action: Action): action is DetailAction {
   return DETAIL_ACTION_TYPES.has(action.type);
 }
 
+/** Every action that only ever touches `paneTree`/focus/zoom, never event
+ * selection or app mode — split out into `paneTreeActions.ts` purely to keep
+ * `keyHandler.ts` under the repo's ~200-line-per-source-file guideline. */
+export type PaneTreeAction =
+  | { type: "focus-next" }
+  | { type: "focus-prev" }
+  | { type: "move-focus"; direction: PaneFocusDirection }
+  | { type: "split-pane"; direction: PaneSplitDirection }
+  | { type: "close-pane" }
+  | { type: "open-view"; direction: PaneSplitDirection }
+  | { type: "grow" }
+  | { type: "shrink" };
+
+const PANE_TREE_ACTION_TYPES = new Set<Action["type"]>([
+  "focus-next",
+  "focus-prev",
+  "move-focus",
+  "split-pane",
+  "close-pane",
+  "open-view",
+  "grow",
+  "shrink",
+]);
+
+export function isPaneTreeAction(action: Action): action is PaneTreeAction {
+  return PANE_TREE_ACTION_TYPES.has(action.type);
+}
+
 /** Implemented by every detail-view component (`DetailOverlay`,
  * `NetworkDetailOverlay`, `StateDetailOverlay`) via `useImperativeHandle`, so
  * `App.tsx`'s single `useInput` can forward a resolved `DetailAction` to
@@ -115,6 +150,27 @@ export function resolveAction(mode: Mode, input: string, key: Key): Action | nul
   // normal mode
   if (key.tab && key.shift) return { type: "focus-prev" };
   if (key.tab) return { type: "focus-next" };
+  // Ctrl+arrow (directional pane focus) must be checked before the plain
+  // arrow checks below for the same reason as Shift+arrow: key.upArrow etc.
+  // are true regardless of modifiers, only the qualified branch should win.
+  if (key.ctrl && key.leftArrow) return { type: "move-focus", direction: "left" };
+  if (key.ctrl && key.rightArrow) return { type: "move-focus", direction: "right" };
+  if (key.ctrl && key.upArrow) return { type: "move-focus", direction: "up" };
+  if (key.ctrl && key.downArrow) return { type: "move-focus", direction: "down" };
+  // Deliberate deviation from full.md's suggested Ctrl+Shift+V/Ctrl+Shift+H:
+  // Ink's raw-mode key parser (parse-keypress.js) maps Ctrl+letter straight
+  // to its C0 control byte (0x01-0x1a) — Shift can't be encoded alongside
+  // that byte, so `key.ctrl && key.shift` can never be true for a letter
+  // key. Worse, Ctrl+H is *literally* the Backspace byte (0x08) and can
+  // never be observed as its own key at all. Plain Ctrl+letter, avoiding
+  // bytes Ink already claims (H=backspace, I=tab, M=return), is the only
+  // combination that's actually reachable from a real terminal.
+  if (key.ctrl && input === "v") return { type: "split-pane", direction: "row" }; // vertical split
+  if (key.ctrl && input === "b") return { type: "split-pane", direction: "column" }; // split below
+  if (key.ctrl && input === "w") return { type: "close-pane" };
+  // reopen a closed default view — direction mirrors split-pane's V/B pairing
+  if (key.ctrl && input === "n") return { type: "open-view", direction: "row" }; // vertical
+  if (key.ctrl && input === "o") return { type: "open-view", direction: "column" }; // horizontal
   // Shift+arrow/J/K (range extend) must be checked before the plain
   // arrow/j/k checks below, since key.upArrow/downArrow are true either way
   // — only the shift-qualified branch should win when shift is held.

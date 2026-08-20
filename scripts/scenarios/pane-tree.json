@@ -1,0 +1,76 @@
+{
+  "events": [
+    {
+      "type": "hello",
+      "appName": "verify",
+      "platform": "ios"
+    },
+    {
+      "type": "event",
+      "event": {
+        "id": "net1",
+        "timestamp": 0,
+        "category": "network",
+        "label": "GET /nearby 200 12ms",
+        "durationMs": 12,
+        "data": {
+          "method": "GET",
+          "url": "https://api.example.com/nearby",
+          "status": 200,
+          "ok": true
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "keys": [
+        "\u0016"
+      ],
+      "wait": 0.6,
+      "expect": [
+        "NAV / SCREEN",
+        "GLOBAL STATE",
+        "API CALLS",
+        "QUERY CACHE",
+        "CONSOLE / ERRORS"
+      ]
+    },
+    {
+      "keys": [
+        "\u0017"
+      ],
+      "wait": 0.6,
+      "expect": [
+        "NAV / SCREEN",
+        "GLOBAL STATE",
+        "API CALLS",
+        "QUERY CACHE",
+        "CONSOLE / ERRORS"
+      ]
+    },
+    {
+      "keys": [
+        "\u001b[1;5B",
+        "enter"
+      ],
+      "wait": 0.8,
+      "expect": [
+        "REQUEST",
+        "RESPONSE"
+      ]
+    },
+    {
+      "keys": [
+        "esc"
+      ],
+      "wait": 0.5,
+      "expect": [
+        "API CALLS"
+      ],
+      "not_expect": [
+        "REQUEST"
+      ]
+    }
+  ]
+}

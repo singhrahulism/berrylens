@@ -781,4 +781,162 @@ describe("App", () => {
 
     expect(lastFrame() ?? "").toContain("connected to server");
   });
+
+  // Phase 11: flexible pane system (split / close / move / zoom). Ctrl+V/Ctrl+B
+  // (not Ctrl+Shift+V/H) — see keymap.ts's comment for why: Ink's raw-mode
+  // parser can't encode Shift on a Ctrl+letter combo, and Ctrl+H is literally
+  // the Backspace byte.
+  it("Ctrl+V splits the focused pane into two independently-focusable instances of the same view", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    stdin.write("\t"); // nav -> state
+    await flush();
+    stdin.write("\t"); // state -> api
+    await flush();
+
+    server.emit("event", makeEvent({ category: "network", label: "GET /nearby 200" }));
+    await flush();
+
+    stdin.write("\x16"); // Ctrl+V
+    await flush();
+
+    const frame = lastFrame() ?? "";
+    expect(frame.split("API CALLS")).toHaveLength(3); // title appears twice = 2 instances
+    expect(frame.split("GET /nearby 200")).toHaveLength(3); // same underlying events, shown in both
+  });
+
+  it("Ctrl+W closes a split-created pane and restores the sibling's full space", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    stdin.write("\t");
+    await flush();
+    stdin.write("\t");
+    await flush();
+    stdin.write("\x16"); // split API CALLS
+    await flush();
+    expect((lastFrame() ?? "").split("API CALLS")).toHaveLength(3);
+
+    stdin.write("\x17"); // Ctrl+W — closes the newly-focused split-created instance
+    await flush();
+
+    const frame = lastFrame() ?? "";
+    expect(frame.split("API CALLS")).toHaveLength(2); // back to a single instance
+    expect(frame).toContain("NAV / SCREEN"); // rest of the grid is unaffected
+  });
+
+  it("Ctrl+W closes the default-focused pane cleanly (the true last-pane no-op guardrail is unit-tested in paneTree.test.ts)", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    stdin.write("\x17"); // closes NAV / SCREEN, the default-focused pane
+    await flush();
+
+    const frame = lastFrame() ?? "";
+    expect(frame).not.toContain("NAV / SCREEN");
+    expect(frame).toContain("GLOBAL STATE"); // rest of the grid still renders, nothing crashed
+  });
+
+  it("zoom (z) still works on a pane created by a split", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    stdin.write("\t");
+    await flush();
+    stdin.write("\t");
+    await flush();
+    stdin.write("\x16"); // split API CALLS — focus moves to the new instance
+    await flush();
+
+    stdin.write("z");
+    await flush();
+    let frame = lastFrame() ?? "";
+    expect(frame).toContain("API CALLS");
+    expect(frame).not.toContain("NAV / SCREEN");
+    expect(frame).not.toContain("GLOBAL STATE");
+
+    stdin.write("z"); // unzoom
+    await flush();
+    frame = lastFrame() ?? "";
+    expect(frame).toContain("NAV / SCREEN");
+    expect(frame.split("API CALLS")).toHaveLength(3); // both instances back
+  });
+
+  it("Ctrl+Down moves focus directly from NAV to API CALLS without Tab", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    server.emit(
+      "event",
+      makeEvent({
+        category: "network",
+        label: "GET /nearby 200",
+        data: { method: "GET", url: "/nearby", status: 200 },
+      }),
+    );
+    await flush();
+
+    stdin.write("\x1b[1;5B"); // Ctrl+Down (default focus starts on NAV, empty)
+    await flush();
+    stdin.write("\r"); // open-detail is a no-op unless focus actually reached API CALLS
+    await flush();
+
+    expect(lastFrame() ?? "").toContain("REQUEST");
+  });
+
+  it("Ctrl+N reopens a closed default view (e.g. GLOBAL STATE) once it's been closed entirely", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    stdin.write("\t"); // nav -> state
+    await flush();
+    stdin.write("\x17"); // Ctrl+W closes GLOBAL STATE entirely
+    await flush();
+    expect(lastFrame() ?? "").not.toContain("GLOBAL STATE");
+
+    stdin.write("\x0e"); // Ctrl+N reopens it
+    await flush();
+
+    expect(lastFrame() ?? "").toContain("GLOBAL STATE");
+  });
+
+  it("Ctrl+O reopens a closed default view horizontally instead of vertically (direction is honored, not always Ctrl+N's row)", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    stdin.write("\t");
+    await flush();
+    stdin.write("\x17"); // Ctrl+W closes GLOBAL STATE entirely
+    await flush();
+    expect(lastFrame() ?? "").not.toContain("GLOBAL STATE");
+
+    stdin.write("\x0f"); // Ctrl+O reopens it stacked (column split), not side-by-side
+    await flush();
+
+    expect(lastFrame() ?? "").toContain("GLOBAL STATE");
+  });
+
+  it("Ctrl+N is a no-op once every default view already has an instance open", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    stdin.write("\x0e"); // nothing missing in the default grid
+    await flush();
+
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("NAV / SCREEN");
+    expect(frame).toContain("GLOBAL STATE");
+    expect(frame).toContain("API CALLS");
+    expect(frame).toContain("QUERY CACHE");
+    expect(frame).toContain("CONSOLE / ERRORS");
+  });
 });

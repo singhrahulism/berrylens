@@ -1,15 +1,15 @@
 import React from "react";
 import { Box } from "ink";
-import { DEFAULT_LAYOUT, DEFAULT_PANES, TIMELINE_PANE, paneById } from "../paneConfig";
+import { DEFAULT_PANES, TIMELINE_PANE, paneById } from "../paneConfig";
 import { computeProportionalSizes, visibleRowsForPaneHeight } from "../layout";
 import { eventsForPane, listForPane, type AppState } from "../appState";
+import { findLeafViewId, type PaneNode } from "../paneTree";
 import { Pane } from "./Pane";
 
 export interface DashboardProps {
   state: AppState;
   gridHeight: number;
   terminalColumns: number;
-  rowHeights: number[];
   highlightFrom?: number;
   highlightTo?: number;
 }
@@ -18,20 +18,20 @@ export interface DashboardProps {
  * (full-screen timeline, a zoomed single pane, or the default multi-pane
  * grid) — never combined, same rule as the detail/search overlays this
  * replaces in `App.tsx`. */
-export function Dashboard({ state, gridHeight, terminalColumns, rowHeights, highlightFrom, highlightTo }: DashboardProps) {
-  function renderPane(paneId: string, width: number, height: number, visibleRows: number) {
-    const pane = paneById(DEFAULT_PANES, paneId);
+export function Dashboard({ state, gridHeight, terminalColumns, highlightFrom, highlightTo }: DashboardProps) {
+  function renderPane(instanceId: string, viewId: string, width: number, height: number, visibleRows: number) {
+    const pane = paneById(DEFAULT_PANES, viewId);
     if (!pane) return null;
-    const list = eventsForPane(state.events, pane.categories, state.appliedFilters[paneId]);
-    const isFocused = state.focusedPaneId === paneId;
+    const list = eventsForPane(state.events, pane.categories, state.appliedFilters[instanceId]);
+    const isFocused = state.focusedPaneId === instanceId;
     return (
       <Pane
-        key={paneId}
+        key={instanceId}
         title={pane.title}
-        filterActive={Boolean(state.appliedFilters[paneId])}
+        filterActive={Boolean(state.appliedFilters[instanceId])}
         events={list}
         focused={isFocused}
-        selectedIndexFromEnd={state.selectedFromEnd[paneId] ?? 0}
+        selectedIndexFromEnd={state.selectedFromEnd[instanceId] ?? 0}
         rangeAnchorFromEnd={isFocused ? (state.rangeAnchor ?? undefined) : undefined}
         width={width}
         height={height}
@@ -39,6 +39,28 @@ export function Dashboard({ state, gridHeight, terminalColumns, rowHeights, high
         highlightFromTimestamp={isFocused ? undefined : highlightFrom}
         highlightToTimestamp={isFocused ? undefined : highlightTo}
       />
+    );
+  }
+
+  /** Recursively renders the pane tree (Phase 11) — a split node becomes a
+   * flex row/column of its children sized by `computeProportionalSizes`
+   * over its weights, same math `+`/`-` resize already relied on for the
+   * fixed 2-row grid, now applied at arbitrary depth. */
+  function renderNode(node: PaneNode, width: number, height: number): React.ReactNode {
+    if (node.type === "leaf") return renderPane(node.id, node.viewId, width, height, visibleRowsForPaneHeight(height));
+    const sizes = computeProportionalSizes(node.direction === "row" ? width : height, node.weights);
+    return (
+      <Box key="split" flexDirection={node.direction === "row" ? "row" : "column"} width={width} height={height} overflow="hidden">
+        {node.children.map((child, index) => {
+          const childWidth = node.direction === "row" ? sizes[index] : width;
+          const childHeight = node.direction === "column" ? sizes[index] : height;
+          return (
+            <Box key={index} width={childWidth} height={childHeight} overflow="hidden">
+              {renderNode(child, childWidth, childHeight)}
+            </Box>
+          );
+        })}
+      </Box>
     );
   }
 
@@ -69,32 +91,17 @@ export function Dashboard({ state, gridHeight, terminalColumns, rowHeights, high
   }
 
   if (state.zoomedPaneId) {
+    const viewId = findLeafViewId(state.paneTree, state.zoomedPaneId);
     return (
       <Box flexDirection="column" height={gridHeight} width={terminalColumns} overflow="hidden">
-        {renderPane(state.zoomedPaneId, terminalColumns, gridHeight, visibleRowsForPaneHeight(gridHeight))}
+        {viewId && renderPane(state.zoomedPaneId, viewId, terminalColumns, gridHeight, visibleRowsForPaneHeight(gridHeight))}
       </Box>
     );
   }
 
   return (
     <Box flexDirection="column" height={gridHeight} width={terminalColumns} overflow="hidden">
-      {DEFAULT_LAYOUT.map((row, rowIndex) => {
-        const rowHeight = rowHeights[rowIndex];
-        const paneWidths =
-          row.paneIds.length > 1
-            ? computeProportionalSizes(
-                terminalColumns,
-                row.paneIds.map((paneId) => state.growByKey[`pane:${paneId}`] ?? 1),
-              )
-            : [terminalColumns];
-        return (
-          <Box key={rowIndex} flexDirection="row" height={rowHeight} width={terminalColumns} overflow="hidden">
-            {row.paneIds.map((paneId, paneIndex) =>
-              renderPane(paneId, paneWidths[paneIndex], rowHeight, visibleRowsForPaneHeight(rowHeight)),
-            )}
-          </Box>
-        );
-      })}
+      {renderNode(state.paneTree, terminalColumns, gridHeight)}
     </Box>
   );
 }

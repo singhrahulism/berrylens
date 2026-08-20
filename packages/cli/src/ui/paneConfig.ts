@@ -44,23 +44,6 @@ export const TIMELINE_PANE: PaneDefinition = { id: "timeline", title: "TIMELINE"
 
 export const ALL_PANES: PaneDefinition[] = [...DEFAULT_PANES, TIMELINE_PANE];
 
-export function focusOrder(layout: PaneRow[]): string[] {
-  return layout.flatMap((row) => row.paneIds);
-}
-
-/** `Tab`/`Shift+Tab` cycle order — the one source of truth for it, shared by
- * `appState.ts` (initial focus) and `keyHandler.ts` (`focus-next`/`focus-prev`). */
-export const FOCUS_ORDER: string[] = focusOrder(DEFAULT_LAYOUT);
-
 export function paneById(panes: PaneDefinition[], id: string): PaneDefinition | undefined {
   return panes.find((pane) => pane.id === id);
-}
-
-export function rowIndexForPane(layout: PaneRow[], paneId: string): number {
-  return layout.findIndex((row) => row.paneIds.includes(paneId));
-}
-
-export function siblingsInRow(layout: PaneRow[], paneId: string): string[] {
-  const row = layout.find((candidate) => candidate.paneIds.includes(paneId));
-  return row ? row.paneIds.filter((id) => id !== paneId) : [];
 }

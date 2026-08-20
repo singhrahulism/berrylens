@@ -3,10 +3,9 @@ import { Box, Text, useApp, useInput, useStdin, useStdout } from "ink";
 import type { HelloMessage, InspectorEvent } from "@berrylens/protocol";
 import type { ConnectionInfo, InspectorServer } from "../server";
 import type { MetroTarget } from "../metroPairing";
-import { ALL_PANES, DEFAULT_LAYOUT, paneById } from "./paneConfig";
-import { FOOTER_ROWS, STATUS_BAR_ROWS, computeProportionalSizes, visibleRowsForSearch } from "./layout";
+import { FOOTER_ROWS, STATUS_BAR_ROWS, visibleRowsForSearch } from "./layout";
 import { isDetailAction, resolveAction, type DetailHandle } from "./keymap";
-import { hasDiff, initialState, listForPane, positiveOr } from "./appState";
+import { focusedPaneDefinition, hasDiff, initialState, listForPane, positiveOr } from "./appState";
 import { reducer } from "./reducer";
 import { performDetailCurlExport, performDetailDump } from "./detailKeyEffects";
 import { Dashboard } from "./components/Dashboard";
@@ -92,8 +91,8 @@ export function App({ server, metroTarget }: AppProps) {
     dispatch({ kind: "key", input, key });
   });
 
-  const focusedPane = paneById(ALL_PANES, state.focusedPaneId);
-  const focusedList = focusedPane ? listForPane(state, focusedPane) : [];
+  const focusedPane = focusedPaneDefinition(state);
+  const focusedList = focusedPane ? listForPane(state, focusedPane, state.focusedPaneId) : [];
   const detailEvent = focusedList[focusedList.length - 1 - (state.selectedFromEnd[state.focusedPaneId] ?? 0)];
   const rangeAnchorEvent =
     state.rangeAnchor !== null ? focusedList[focusedList.length - 1 - state.rangeAnchor] : undefined;
@@ -111,10 +110,6 @@ export function App({ server, metroTarget }: AppProps) {
   const terminalRows = positiveOr(stdout?.rows, DEFAULT_TERMINAL_ROWS);
   const terminalColumns = positiveOr(stdout?.columns, DEFAULT_TERMINAL_COLUMNS);
   const gridHeight = Math.max(1, terminalRows - STATUS_BAR_ROWS - FOOTER_ROWS);
-  const rowHeights = computeProportionalSizes(
-    gridHeight,
-    DEFAULT_LAYOUT.map((_, rowIndex) => state.growByKey[`row:${rowIndex}`] ?? 1),
-  );
 
   const inDetailMode = state.mode === "detail" && detailEvent;
   const inSearchMode = state.mode === "search";
@@ -165,7 +160,6 @@ export function App({ server, metroTarget }: AppProps) {
           state={state}
           gridHeight={gridHeight}
           terminalColumns={terminalColumns}
-          rowHeights={rowHeights}
           highlightFrom={highlightFrom}
           highlightTo={highlightTo}
         />
@@ -176,7 +170,8 @@ export function App({ server, metroTarget }: AppProps) {
             <Text>/ {state.filterText}</Text>
           ) : (
             <Text dimColor>
-              Tab focus · j/k scroll · J/K extend range · +/- resize · z zoom · enter detail · / filter pane · ? search all ·
+              Tab/Ctrl+arrow focus · j/k scroll · J/K extend range · +/- resize · Ctrl+V/B split · Ctrl+W close pane ·
+              Ctrl+N/O reopen closed pane (vert/horiz) · z zoom · enter detail · / filter pane · ? search all ·
               {state.view === "timeline" ? " d dashboard" : " t timeline"} · c clear · q quit
             </Text>
           )}

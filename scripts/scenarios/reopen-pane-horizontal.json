@@ -1,0 +1,31 @@
+{
+  "steps": [
+    {
+      "keys": [
+        "tab"
+      ],
+      "wait": 0.4,
+      "expect": [
+        "GLOBAL STATE"
+      ]
+    },
+    {
+      "keys": [
+        "\u0017"
+      ],
+      "wait": 0.5,
+      "not_expect": [
+        "GLOBAL STATE"
+      ]
+    },
+    {
+      "keys": [
+        "\u000f"
+      ],
+      "wait": 0.5,
+      "expect": [
+        "GLOBAL STATE"
+      ]
+    }
+  ]
+}

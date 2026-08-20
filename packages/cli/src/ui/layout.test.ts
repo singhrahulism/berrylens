@@ -6,7 +6,14 @@ import {
   shrinkRatio,
   computeScrollWindow,
   computeNetworkDetailLayout,
+  computePaneTreeLayout,
+  findDirectionalNeighbor,
 } from "./layout";
+import { buildDefaultPaneTree, type PaneLeaf, type PaneNode } from "./paneTree";
+
+function leaf(id: string): PaneLeaf {
+  return { type: "leaf", id, viewId: id };
+}
 
 describe("computeProportionalSizes", () => {
   it("splits evenly when it divides cleanly", () => {
@@ -93,5 +100,33 @@ describe("computeNetworkDetailLayout", () => {
   it("never collapses panel A below a usable floor on a short terminal", () => {
     const layout = computeNetworkDetailLayout(10);
     expect(layout.requestPanelRows).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("computePaneTreeLayout", () => {
+  it("sizes a row split's children by weight, summing to the full width", () => {
+    const tree: PaneNode = { type: "split", direction: "row", children: [leaf("a"), leaf("b")], weights: [1, 3] };
+    const rects = computePaneTreeLayout(tree, 0, 0, 100, 10);
+    expect(rects.find((r) => r.id === "a")!.width + rects.find((r) => r.id === "b")!.width).toBe(100);
+    expect(rects.every((r) => r.height === 10)).toBe(true);
+  });
+});
+
+describe("findDirectionalNeighbor", () => {
+  it("finds the pane to the right in a row split", () => {
+    const tree: PaneNode = { type: "split", direction: "row", children: [leaf("a"), leaf("b")], weights: [1, 1] };
+    expect(findDirectionalNeighbor(tree, "a", "right")).toBe("b");
+    expect(findDirectionalNeighbor(tree, "b", "left")).toBe("a");
+  });
+
+  it("finds nothing in a direction with no candidate", () => {
+    const tree: PaneNode = { type: "split", direction: "row", children: [leaf("a"), leaf("b")], weights: [1, 1] };
+    expect(findDirectionalNeighbor(tree, "a", "down")).toBeUndefined();
+  });
+
+  it("picks the nearest pane below in a mixed row/column layout", () => {
+    const tree = buildDefaultPaneTree(); // [nav|state] / api / [query|console]
+    expect(findDirectionalNeighbor(tree, "nav", "down")).toBe("api");
+    expect(findDirectionalNeighbor(tree, "api", "down")).toBe("query");
   });
 });
