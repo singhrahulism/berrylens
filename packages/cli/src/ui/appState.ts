@@ -34,6 +34,24 @@ export interface AppState {
   view: "dashboard" | "timeline";
   /** `focusedPaneId` to restore when leaving the timeline view back to the dashboard. */
   savedFocusedPaneId: string;
+  /** Id of the active layout preset (Phase 12) — one of `LAYOUT_PRESETS`' ids,
+   * or `"custom"` once any pane-tree action (split/close/reopen/resize) has
+   * diverged the tree from whichever preset was last selected. */
+  layoutPresetId: string;
+  /** Snapshot of the developer's own hand-built arrangement, kept in sync by
+   * every pane-tree action while `layoutPresetId === "custom"` — lets a
+   * custom layout round-trip through the switcher (switch to a preset and
+   * back) without being lost. `null` until the tree first diverges. */
+  customPaneTree: PaneNode | null;
+  /** Cursor position while the layout switcher (`l`) is open. */
+  layoutCursor: number;
+  /** Which edge of a pane's visible window the selection sticks to while
+   * scrolling with j/k — true (default) pins it to the top row, false pins
+   * it to the bottom row. Toggled via the `s` settings menu (`settings.ts`'s
+   * `SETTINGS`). See `computeScrollWindow`. */
+  scrollStickTop: boolean;
+  /** Cursor position while the settings menu (`s`) is open — indexes into `SETTINGS`. */
+  settingsCursor: number;
 }
 
 export type AppEvent =
@@ -68,6 +86,11 @@ export const initialState: AppState = {
   rangeAnchor: null,
   view: "dashboard",
   savedFocusedPaneId: DEFAULT_PANES[0].id,
+  layoutPresetId: "state-debug", // matches DEFAULT_PANE_TREE, built the same way
+  customPaneTree: null,
+  layoutCursor: 0,
+  scrollStickTop: true,
+  settingsCursor: 0,
 };
 
 export function positiveOr(value: number | undefined, fallback: number): number {

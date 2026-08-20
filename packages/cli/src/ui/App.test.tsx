@@ -939,4 +939,138 @@ describe("App", () => {
     expect(frame).toContain("QUERY CACHE");
     expect(frame).toContain("CONSOLE / ERRORS");
   });
+
+  it("l opens the layout switcher; selecting Network Debug swaps the grid without losing event history", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    server.emit(
+      "event",
+      makeEvent({ category: "network", label: "GET /nearby 200", data: { method: "GET", url: "/nearby", status: 200 } }),
+    );
+    await flush();
+
+    stdin.write("l");
+    await flush();
+    expect(lastFrame() ?? "").toContain("SWITCH LAYOUT");
+
+    stdin.write("k"); // state-debug (active) -> network-debug
+    await flush();
+    stdin.write("\r");
+    await flush();
+
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("API CALLS");
+    expect(frame).toContain("QUERY CACHE");
+    expect(frame).not.toContain("NAV / SCREEN"); // not part of Network Debug
+    expect(frame).toContain("GET /nearby 200"); // event history survived the swap
+  });
+
+  it("a hand-built custom arrangement round-trips through the switcher (switch away, switch back, layout unchanged)", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    stdin.write("\t");
+    await flush();
+    stdin.write("\t"); // nav -> state -> api
+    await flush();
+    stdin.write("\x16"); // Ctrl+V splits API CALLS — arrangement now diverges from any preset ("custom")
+    await flush();
+    expect((lastFrame() ?? "").split("API CALLS")).toHaveLength(3); // two instances
+
+    stdin.write("l");
+    await flush();
+    stdin.write("k"); // cursor starts on "Custom" -> move up to "Full"
+    await flush();
+    stdin.write("\r");
+    await flush();
+    expect((lastFrame() ?? "").split("API CALLS")).toHaveLength(2); // Full has a single API CALLS instance
+
+    stdin.write("l");
+    await flush();
+    stdin.write("j"); // back down from "Full" to "Custom"
+    await flush();
+    stdin.write("\r");
+    await flush();
+    expect((lastFrame() ?? "").split("API CALLS")).toHaveLength(3); // custom split restored unchanged
+  });
+
+  it("s opens the settings menu; enter toggles selection stickiness, esc closes it", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    stdin.write("s");
+    await flush();
+    let frame = lastFrame() ?? "";
+    expect(frame).toContain("SETTINGS");
+    expect(frame).toContain("Top"); // default
+
+    stdin.write("\r"); // toggle
+    await flush();
+    frame = lastFrame() ?? "";
+    expect(frame).toContain("Bottom");
+
+    stdin.write("\x1b"); // esc closes back to the grid
+    await flush();
+    frame = lastFrame() ?? "";
+    expect(frame).not.toContain("SETTINGS");
+    expect(frame).toContain("NAV / SCREEN");
+  });
+
+  it("scroll stickiness defaults to top: the cursor pins to the first visible row, revealing newer events below it instead of only older ones above", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    for (let i = 0; i < 30; i += 1) {
+      server.emit("event", makeEvent({ label: `history-event-${i}` }));
+      await flush();
+    }
+
+    for (let i = 0; i < 15; i += 1) {
+      stdin.write("k"); // move selection up to roughly the middle of the list
+      await flush();
+    }
+
+    const frame = lastFrame() ?? "";
+    // selection is history-event-14 (29 - 15 moves); with the cursor pinned
+    // to the FIRST visible row, the window extends into newer events below
+    // it (event-18) instead of older ones above it (event-13, which is what
+    // bottom-sticking would have shown instead)
+    expect(frame).toContain("history-event-18");
+    expect(frame).not.toContain("history-event-13");
+  });
+
+  it("toggling stickiness to Bottom restores the old behavior: the cursor pins to the last visible row", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    for (let i = 0; i < 30; i += 1) {
+      server.emit("event", makeEvent({ label: `history-event-${i}` }));
+      await flush();
+    }
+
+    stdin.write("s");
+    await flush();
+    stdin.write("\r"); // toggle default (Top) to Bottom
+    await flush();
+    stdin.write("\x1b");
+    await flush();
+
+    for (let i = 0; i < 15; i += 1) {
+      stdin.write("k");
+      await flush();
+    }
+
+    const frame = lastFrame() ?? "";
+    // selection is history-event-14 again; with the cursor pinned to the
+    // LAST visible row, the window trails into older events above it
+    // (event-10) instead of newer ones below it (event-18)
+    expect(frame).toContain("history-event-10");
+    expect(frame).not.toContain("history-event-18");
+  });
 });

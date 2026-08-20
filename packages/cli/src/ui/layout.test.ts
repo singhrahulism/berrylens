@@ -81,6 +81,20 @@ describe("computeScrollWindow", () => {
   it("never scrolls past the start", () => {
     expect(computeScrollWindow(30, 0, 8)).toEqual({ start: 0, end: 8 });
   });
+
+  describe("stickToTop", () => {
+    it("pins the selection to the first visible row while there's room", () => {
+      expect(computeScrollWindow(30, 19, 8, true)).toEqual({ start: 19, end: 27 });
+    });
+
+    it("clamps at the end of the list instead of leaving blank rows below the selection", () => {
+      expect(computeScrollWindow(30, 29, 8, true)).toEqual({ start: 22, end: 30 });
+    });
+
+    it("still shows from the start when the selection is near the head of the list", () => {
+      expect(computeScrollWindow(30, 0, 8, true)).toEqual({ start: 0, end: 8 });
+    });
+  });
 });
 
 describe("computeNetworkDetailLayout", () => {

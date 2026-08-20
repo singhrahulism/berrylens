@@ -15,6 +15,10 @@ import { StateDetailOverlay } from "./components/StateDetailOverlay";
 import { StatusBar } from "./components/StatusBar";
 import { findGlobalMatches } from "./views/search";
 import { SearchOverlay } from "./components/SearchOverlay";
+import { layoutOptions } from "./layoutPresets";
+import { LayoutSwitcherOverlay } from "./components/LayoutSwitcherOverlay";
+import { SettingsOverlay } from "./components/SettingsOverlay";
+import { SETTINGS } from "./settings";
 
 const STATUS_MESSAGE_DURATION_MS = 4000;
 const ERROR_FLASH_DURATION_MS = 2500;
@@ -113,6 +117,8 @@ export function App({ server, metroTarget }: AppProps) {
 
   const inDetailMode = state.mode === "detail" && detailEvent;
   const inSearchMode = state.mode === "search";
+  const inLayoutMode = state.mode === "layout";
+  const inSettingsMode = state.mode === "settings";
   const DetailComponent =
     detailEvent?.category === "network"
       ? NetworkDetailOverlay
@@ -147,6 +153,17 @@ export function App({ server, metroTarget }: AppProps) {
           cursor={state.searchCursor}
           maxVisibleRows={visibleRowsForSearch(Math.max(1, terminalRows - STATUS_BAR_ROWS))}
         />
+      ) : inLayoutMode ? (
+        <LayoutSwitcherOverlay
+          options={layoutOptions(Boolean(state.customPaneTree))}
+          cursor={state.layoutCursor}
+          activeId={state.layoutPresetId}
+        />
+      ) : inSettingsMode ? (
+        <SettingsOverlay
+          rows={SETTINGS.map((setting) => ({ id: setting.id, label: setting.label, value: setting.value(state) }))}
+          cursor={state.settingsCursor}
+        />
       ) : inDetailMode ? (
         <DetailComponent
           ref={detailRef}
@@ -164,15 +181,15 @@ export function App({ server, metroTarget }: AppProps) {
           highlightTo={highlightTo}
         />
       )}
-      {!inDetailMode && !inSearchMode && (
+      {!inDetailMode && !inSearchMode && !inLayoutMode && !inSettingsMode && (
         <Box paddingX={1}>
           {state.mode === "filter" ? (
             <Text>/ {state.filterText}</Text>
           ) : (
             <Text dimColor>
               Tab/Ctrl+arrow focus · j/k scroll · J/K extend range · +/- resize · Ctrl+V/B split · Ctrl+W close pane ·
-              Ctrl+N/O reopen closed pane (vert/horiz) · z zoom · enter detail · / filter pane · ? search all ·
-              {state.view === "timeline" ? " d dashboard" : " t timeline"} · c clear · q quit
+              Ctrl+N/O reopen closed pane (vert/horiz) · z zoom · l layout · s settings · enter detail · / filter pane ·
+              ? search all · {state.view === "timeline" ? " d dashboard" : " t timeline"} · c clear · q quit
             </Text>
           )}
         </Box>

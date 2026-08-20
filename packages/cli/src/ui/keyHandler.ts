@@ -5,6 +5,8 @@ import { findGlobalMatches } from "./views/search";
 import { eventsForPane, focusedPaneDefinition, listForPane, type AppState } from "./appState";
 import { collectLeaves } from "./paneTree";
 import { handlePaneTreeAction } from "./paneTreeActions";
+import { LAYOUT_PRESETS, layoutOptions } from "./layoutPresets";
+import { SETTINGS } from "./settings";
 
 /** Every keyboard-driven state transition in normal/filter/search mode —
  * split out from `appState.ts` purely to keep both files under the repo's
@@ -152,6 +154,49 @@ export function handleKey(state: AppState, input: string, key: Key): AppState {
         focusedPaneId: state.savedFocusedPaneId,
         rangeAnchor: null,
       };
+    case "layout-start": {
+      const options = layoutOptions(Boolean(state.customPaneTree));
+      const current = options.findIndex((option) => option.id === state.layoutPresetId);
+      return { ...state, mode: "layout", layoutCursor: current === -1 ? 0 : current };
+    }
+    case "layout-move": {
+      const options = layoutOptions(Boolean(state.customPaneTree));
+      const next = Math.max(0, Math.min(options.length - 1, state.layoutCursor + resolved.direction));
+      return { ...state, layoutCursor: next };
+    }
+    case "layout-cancel":
+      return { ...state, mode: "normal" };
+    case "layout-select": {
+      const options = layoutOptions(Boolean(state.customPaneTree));
+      const chosen = options[state.layoutCursor];
+      if (!chosen) return { ...state, mode: "normal" };
+      const newTree =
+        chosen.id === "custom"
+          ? (state.customPaneTree ?? state.paneTree)
+          : (LAYOUT_PRESETS.find((preset) => preset.id === chosen.id)?.buildTree() ?? state.paneTree);
+      const leaves = collectLeaves(newTree);
+      return {
+        ...state,
+        mode: "normal",
+        paneTree: newTree,
+        layoutPresetId: chosen.id,
+        focusedPaneId: leaves[0]?.id ?? state.focusedPaneId,
+        zoomedPaneId: null,
+        rangeAnchor: null,
+      };
+    }
+    case "settings-start":
+      return { ...state, mode: "settings", settingsCursor: 0 };
+    case "settings-move": {
+      const next = Math.max(0, Math.min(SETTINGS.length - 1, state.settingsCursor + resolved.direction));
+      return { ...state, settingsCursor: next };
+    }
+    case "settings-cancel":
+      return { ...state, mode: "normal" };
+    case "settings-toggle": {
+      const chosen = SETTINGS[state.settingsCursor];
+      return chosen ? chosen.toggle(state) : state;
+    }
     default:
       return state;
   }

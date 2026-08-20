@@ -1,6 +1,6 @@
 import React from "react";
 import { Box } from "ink";
-import { DEFAULT_PANES, TIMELINE_PANE, paneById } from "../paneConfig";
+import { GRID_PANES, TIMELINE_PANE, paneById } from "../paneConfig";
 import { computeProportionalSizes, visibleRowsForPaneHeight } from "../layout";
 import { eventsForPane, listForPane, type AppState } from "../appState";
 import { findLeafViewId, type PaneNode } from "../paneTree";
@@ -20,7 +20,7 @@ export interface DashboardProps {
  * replaces in `App.tsx`. */
 export function Dashboard({ state, gridHeight, terminalColumns, highlightFrom, highlightTo }: DashboardProps) {
   function renderPane(instanceId: string, viewId: string, width: number, height: number, visibleRows: number) {
-    const pane = paneById(DEFAULT_PANES, viewId);
+    const pane = paneById(GRID_PANES, viewId);
     if (!pane) return null;
     const list = eventsForPane(state.events, pane.categories, state.appliedFilters[instanceId]);
     const isFocused = state.focusedPaneId === instanceId;
@@ -38,6 +38,7 @@ export function Dashboard({ state, gridHeight, terminalColumns, highlightFrom, h
         visibleRows={visibleRows}
         highlightFromTimestamp={isFocused ? undefined : highlightFrom}
         highlightToTimestamp={isFocused ? undefined : highlightTo}
+        scrollStickTop={state.scrollStickTop}
       />
     );
   }
@@ -78,6 +79,7 @@ export function Dashboard({ state, gridHeight, terminalColumns, highlightFrom, h
         width={width}
         height={height}
         visibleRows={visibleRows}
+        scrollStickTop={state.scrollStickTop}
       />
     );
   }

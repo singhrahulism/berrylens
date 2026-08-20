@@ -34,6 +34,10 @@ export interface PaneProps {
    * highlight). `highlightToTimestamp` unset means "at or after", open-ended. */
   highlightFromTimestamp?: number;
   highlightToTimestamp?: number;
+  /** Settings-menu toggle (`s`) — which edge of the visible window the
+   * selection sticks to while scrolling. Defaults to the original bottom-
+   * sticking behavior. */
+  scrollStickTop?: boolean;
 }
 
 /** Pure/presentational — never touches the event bus directly, driven entirely by props. */
@@ -49,10 +53,11 @@ export function Pane({
   visibleRows,
   highlightFromTimestamp,
   highlightToTimestamp,
+  scrollStickTop = false,
 }: PaneProps) {
   const total = events.length;
   const selectedAbsoluteIndex = total - 1 - selectedIndexFromEnd;
-  const { start, end } = computeScrollWindow(total, selectedAbsoluteIndex, visibleRows);
+  const { start, end } = computeScrollWindow(total, selectedAbsoluteIndex, visibleRows, scrollStickTop);
   const visible = events.slice(start, end);
   const scrolled = total > visibleRows;
 

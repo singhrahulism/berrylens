@@ -1,6 +1,6 @@
 import type { Key } from "ink";
 
-export type Mode = "normal" | "filter" | "detail" | "search";
+export type Mode = "normal" | "filter" | "detail" | "search" | "layout" | "settings";
 
 export type PaneSplitDirection = "row" | "column";
 export type PaneFocusDirection = "left" | "right" | "up" | "down";
@@ -37,6 +37,14 @@ export type Action =
   | { type: "clear" }
   | { type: "view-timeline" }
   | { type: "view-dashboard" }
+  | { type: "layout-start" }
+  | { type: "layout-move"; direction: 1 | -1 }
+  | { type: "layout-select" }
+  | { type: "layout-cancel" }
+  | { type: "settings-start" }
+  | { type: "settings-move"; direction: 1 | -1 }
+  | { type: "settings-toggle" }
+  | { type: "settings-cancel" }
   | DetailAction
   | { type: "quit" };
 
@@ -129,6 +137,22 @@ export function resolveAction(mode: Mode, input: string, key: Key): Action | nul
     return null;
   }
 
+  if (mode === "layout") {
+    if (key.escape) return { type: "layout-cancel" };
+    if (key.return) return { type: "layout-select" };
+    if (key.upArrow || input === "k") return { type: "layout-move", direction: -1 };
+    if (key.downArrow || input === "j") return { type: "layout-move", direction: 1 };
+    return null;
+  }
+
+  if (mode === "settings") {
+    if (key.escape) return { type: "settings-cancel" };
+    if (key.return || input === " ") return { type: "settings-toggle" };
+    if (key.upArrow || input === "k") return { type: "settings-move", direction: -1 };
+    if (key.downArrow || input === "j") return { type: "settings-move", direction: 1 };
+    return null;
+  }
+
   if (mode === "detail") {
     if (key.escape) return { type: "close-detail" };
     if (key.tab && key.shift) return { type: "detail-panel-focus", direction: -1 };
@@ -190,6 +214,8 @@ export function resolveAction(mode: Mode, input: string, key: Key): Action | nul
   if (input === "c") return { type: "clear" };
   if (input === "T" || input === "t") return { type: "view-timeline" };
   if (input === "D" || input === "d") return { type: "view-dashboard" };
+  if (input === "L" || input === "l") return { type: "layout-start" };
+  if (input === "s") return { type: "settings-start" };
   if (input === "q") return { type: "quit" };
   return null;
 }

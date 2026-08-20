@@ -79,12 +79,20 @@ export function visibleRowsForPaneHeight(paneHeight: number): number {
  * rendered `events.slice(-visibleRows)` regardless of cursor position, so
  * moving the cursor past the tail window just clamped the highlight at the
  * edge instead of ever sliding the window to show older items.
+ * `stickToTop` (settings-menu toggle) flips which edge the selection hugs:
+ * false (default) pins it to the last visible row, true to the first.
  */
-export function computeScrollWindow(total: number, selectedIndex: number, visibleRows: number): { start: number; end: number } {
+export function computeScrollWindow(
+  total: number,
+  selectedIndex: number,
+  visibleRows: number,
+  stickToTop = false,
+): { start: number; end: number } {
   if (total <= visibleRows) return { start: 0, end: total };
   const clampedSelected = Math.max(0, Math.min(total - 1, selectedIndex));
   const maxStart = total - visibleRows;
-  const start = Math.max(0, Math.min(maxStart, clampedSelected - visibleRows + 1));
+  const desiredStart = stickToTop ? clampedSelected : clampedSelected - visibleRows + 1;
+  const start = Math.max(0, Math.min(maxStart, desiredStart));
   return { start, end: start + visibleRows };
 }
 

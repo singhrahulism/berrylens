@@ -41,6 +41,8 @@ export function handlePaneTreeAction(state: AppState, resolved: PaneTreeAction):
         focusedPaneId: newId,
         selectedFromEnd: { ...state.selectedFromEnd, [newId]: state.selectedFromEnd[state.focusedPaneId] ?? 0 },
         rangeAnchor: null,
+        layoutPresetId: "custom",
+        customPaneTree: newTree,
       };
     }
     case "open-view": {
@@ -65,6 +67,8 @@ export function handlePaneTreeAction(state: AppState, resolved: PaneTreeAction):
         focusedPaneId: newId,
         selectedFromEnd: { ...state.selectedFromEnd, [newId]: 0 },
         rangeAnchor: null,
+        layoutPresetId: "custom",
+        customPaneTree: newTree,
       };
     }
     case "close-pane": {
@@ -78,12 +82,15 @@ export function handlePaneTreeAction(state: AppState, resolved: PaneTreeAction):
         focusedPaneId: stillFocused ? state.focusedPaneId : collectLeaves(result)[0].id,
         zoomedPaneId: state.zoomedPaneId === state.focusedPaneId ? null : state.zoomedPaneId,
         rangeAnchor: null,
+        layoutPresetId: "custom",
+        customPaneTree: result,
       };
     }
     case "grow":
     case "shrink": {
       const transform = resolved.type === "grow" ? growRatio : shrinkRatio;
-      return { ...state, paneTree: adjustWeightForLeaf(state.paneTree, state.focusedPaneId, transform) };
+      const newTree = adjustWeightForLeaf(state.paneTree, state.focusedPaneId, transform);
+      return { ...state, paneTree: newTree, layoutPresetId: "custom", customPaneTree: newTree };
     }
     default:
       return state;

@@ -1,0 +1,48 @@
+{
+  "events": [
+    {
+      "type": "hello",
+      "appName": "verify",
+      "platform": "ios"
+    }
+  ],
+  "steps": [
+    {
+      "keys": ["s"],
+      "wait": 0.6,
+      "expect": ["SETTINGS", "Selection stickiness: Top"]
+    },
+    {
+      "keys": ["j", "k"],
+      "wait": 0.4,
+      "expect": ["SETTINGS", "Selection stickiness: Top"]
+    },
+    {
+      "keys": ["enter"],
+      "wait": 0.6,
+      "expect": ["Selection stickiness: Bottom"]
+    },
+    {
+      "keys": ["esc"],
+      "wait": 0.6,
+      "expect": ["NAV / SCREEN"],
+      "not_expect": ["SETTINGS"]
+    },
+    {
+      "keys": ["s"],
+      "wait": 0.6,
+      "expect": ["Selection stickiness: Bottom"]
+    },
+    {
+      "keys": ["enter"],
+      "wait": 0.6,
+      "expect": ["Selection stickiness: Top"]
+    },
+    {
+      "keys": ["esc"],
+      "wait": 0.6,
+      "expect": ["NAV / SCREEN"],
+      "not_expect": ["SETTINGS"]
+    }
+  ]
+}
