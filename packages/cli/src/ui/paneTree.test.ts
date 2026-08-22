@@ -5,7 +5,9 @@ import {
   buildDefaultPaneTree,
   closePane,
   collectLeaves,
+  computePaneTreeLayout,
   countLeaves,
+  findDirectionalNeighbor,
   findLeafViewId,
   nextInstanceId,
   splitPane,
@@ -132,5 +134,33 @@ describe("findLeafViewId", () => {
       weights: [1, 1],
     };
     expect(findLeafViewId(tree, "a-2")).toBe("a");
+  });
+});
+
+describe("computePaneTreeLayout", () => {
+  it("sizes a row split's children by weight, summing to the full width", () => {
+    const tree: PaneNode = { type: "split", direction: "row", children: [leaf("a"), leaf("b")], weights: [1, 3] };
+    const rects = computePaneTreeLayout(tree, 0, 0, 100, 10);
+    expect(rects.find((r) => r.id === "a")!.width + rects.find((r) => r.id === "b")!.width).toBe(100);
+    expect(rects.every((r) => r.height === 10)).toBe(true);
+  });
+});
+
+describe("findDirectionalNeighbor", () => {
+  it("finds the pane to the right in a row split", () => {
+    const tree: PaneNode = { type: "split", direction: "row", children: [leaf("a"), leaf("b")], weights: [1, 1] };
+    expect(findDirectionalNeighbor(tree, "a", "right")).toBe("b");
+    expect(findDirectionalNeighbor(tree, "b", "left")).toBe("a");
+  });
+
+  it("finds nothing in a direction with no candidate", () => {
+    const tree: PaneNode = { type: "split", direction: "row", children: [leaf("a"), leaf("b")], weights: [1, 1] };
+    expect(findDirectionalNeighbor(tree, "a", "down")).toBeUndefined();
+  });
+
+  it("picks the nearest pane below in a mixed row/column layout", () => {
+    const tree = buildDefaultPaneTree(); // [nav|state] / api / [query|console]
+    expect(findDirectionalNeighbor(tree, "nav", "down")).toBe("api");
+    expect(findDirectionalNeighbor(tree, "api", "down")).toBe("query");
   });
 });

@@ -26,6 +26,15 @@ function summarize(method: string, url: string, status?: number): string {
  * look binary (images, fonts, archives, etc.) by content-type, since decoding
  * those as text would just produce garbage, not useful debug output.
  */
+// RN's global `fetch` is implemented on top of XMLHttpRequest, so a fetch()
+// call drives a real XHR through our patched open/send under the hood. This
+// flag lets patchXHR recognize "this instance was just created by our own
+// patchedFetch" and skip emitting for it, since patchedFetch will emit once
+// the fetch promise resolves. It's set/cleared synchronously around the call
+// to the original fetch — safe because JS is single-threaded and fetch
+// polyfills call xhr.open/send synchronously before returning a promise.
+let suppressXHRCapture = false;
+
 export const networkCapture: Capture = {
   name: "network",
   install(emit: Emit) {
@@ -49,7 +58,14 @@ function patchFetch(emit: Emit): () => void {
     const requestBody = describeRequestBody(init?.body);
 
     try {
-      const response = await original(input as RequestInfo, init);
+      suppressXHRCapture = true;
+      let responsePromise: ReturnType<typeof original>;
+      try {
+        responsePromise = original(input as RequestInfo, init);
+      } finally {
+        suppressXHRCapture = false;
+      }
+      const response = await responsePromise;
       const durationMs = Date.now() - start;
       const responseHeaders = headersToObject(response.headers);
       const responseBody = await describeResponseBody(response);
@@ -85,6 +101,7 @@ interface XHRMeta {
   method: string;
   url: string;
   requestHeaders?: Record<string, string>;
+  fromFetch: boolean;
 }
 
 function patchXHR(emit: Emit): () => void {
@@ -102,7 +119,7 @@ function patchXHR(emit: Emit): () => void {
     url: string | URL,
     ...rest: unknown[]
   ) {
-    this.__berrylens = { method, url: String(url) };
+    this.__berrylens = { method, url: String(url), fromFetch: suppressXHRCapture };
     return (originalOpen as (...args: unknown[]) => void).apply(this, [method, url, ...rest]);
   } as typeof XHR.prototype.open;
 
@@ -121,7 +138,7 @@ function patchXHR(emit: Emit): () => void {
   XHR.prototype.send = function patchedSend(this: XMLHttpRequest & { __berrylens?: XHRMeta }, ...args: unknown[]) {
     const meta = this.__berrylens;
     const start = Date.now();
-    if (meta) {
+    if (meta && !meta.fromFetch) {
       const requestBody = describeRequestBody(args[0] as BodyInit | null | undefined);
       this.addEventListener("loadend", () => {
         const durationMs = Date.now() - start;

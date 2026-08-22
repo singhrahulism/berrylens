@@ -24,3 +24,7 @@ export const STATE_DETAIL_BORDER_COLOR = "magenta";
 export const SEARCH_BORDER_COLOR = "magenta";
 export const LAYOUT_BORDER_COLOR = "yellow";
 export const SETTINGS_BORDER_COLOR = "blue";
+
+/** The pinned-event indicator (`p`) — the ◆ row marker and the status bar's
+ * "pinned: …" line, same value everywhere it appears. */
+export const PINNED_COLOR = "yellow";

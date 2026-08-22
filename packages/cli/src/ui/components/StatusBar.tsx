@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { MetroTarget } from "../../metroPairing";
 import { describePairing } from "../../metroPairing";
+import { PINNED_COLOR } from "../theme";
 
 export interface StatusBarProps {
   connectionStatus: "waiting" | "connected" | "disconnected";
@@ -20,6 +21,9 @@ export interface StatusBarProps {
    * indicator inverse/bold so a fresh error is genuinely hard to miss, not
    * just present in a corner you weren't looking at. */
   errorFlashActive: boolean;
+  /** Label of the currently pinned event (`p`), if any — shown so it's obvious
+   * why cross-pane highlighting stopped following the cursor. */
+  pinnedLabel?: string;
 }
 
 export function StatusBar({
@@ -31,6 +35,7 @@ export function StatusBar({
   statusMessage,
   errorCount,
   errorFlashActive,
+  pinnedLabel,
 }: StatusBarProps) {
   const connectionLabel =
     connectionStatus === "connected" && appInfo
@@ -49,13 +54,18 @@ export function StatusBar({
         <Text color={connectionStatus === "connected" ? "green" : "yellow"}>{connectionLabel}</Text>
       )}
       <Box>
+        {pinnedLabel ? (
+          <Text color={PINNED_COLOR} bold>
+            ◆ pinned: {pinnedLabel}
+          </Text>
+        ) : null}
         {errorCount > 0 ? (
           <Text color="red" bold={errorFlashActive} inverse={errorFlashActive}>
-            ⚠ {errorCount} error{errorCount === 1 ? "" : "s"}
+            {pinnedLabel ? "  " : ""}⚠ {errorCount} error{errorCount === 1 ? "" : "s"}
           </Text>
         ) : null}
         <Text dimColor>
-          {errorCount > 0 ? "  " : ""}
+          {pinnedLabel || errorCount > 0 ? "  " : ""}
           {metroInfo ? `${metroInfo}  ` : ""}
           {eventCount} events
         </Text>

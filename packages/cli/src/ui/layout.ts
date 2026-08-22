@@ -1,5 +1,3 @@
-import type { PaneNode } from "./paneTree";
-
 /**
  * Grid resize math. "+"/"-" adjust an Ink flexbox `flexGrow` value directly —
  * this is the terminal-app equivalent of drag-resizing a pane (true mouse-drag
@@ -35,7 +33,6 @@ function round(value: number): number {
  */
 export const PANE_CHROME_ROWS = 3; // title line + top border + bottom border
 export const STATUS_BAR_ROWS = 1;
-export const FOOTER_ROWS = 1;
 
 /**
  * Proportional integer split of `total` by `weights` — used for both row
@@ -164,67 +161,29 @@ export function computeNetworkDetailLayout(availableHeight: number): NetworkDeta
   };
 }
 
-export interface PaneRect {
-  id: string;
-  viewId: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/** Recursive geometry over a `PaneNode` tree (Phase 11), reusing
- * `computeProportionalSizes` for each split — the abstract-coordinate twin
- * of `Dashboard.tsx`'s nested-Box rendering (kept separate from it since Ink
- * has no precedent for absolute-positioned rendering in this codebase; this
- * exists for geometric reasoning, not to be rendered directly). */
-export function computePaneTreeLayout(node: PaneNode, x: number, y: number, width: number, height: number): PaneRect[] {
-  if (node.type === "leaf") return [{ id: node.id, viewId: node.viewId, x, y, width, height }];
-  const sizes = computeProportionalSizes(node.direction === "row" ? width : height, node.weights);
-  const rects: PaneRect[] = [];
-  let offset = 0;
-  node.children.forEach((child, index) => {
-    const size = sizes[index];
-    rects.push(
-      ...(node.direction === "row"
-        ? computePaneTreeLayout(child, x + offset, y, size, height)
-        : computePaneTreeLayout(child, x, y + offset, width, size)),
-    );
-    offset += size;
-  });
-  return rects;
-}
-
-export type FocusDirection = "left" | "right" | "up" | "down";
-
-/** Nearest leaf in the given direction, by center-to-center distance among
- * candidates that actually lie on that side — computed over an abstract
- * coordinate space (not the real terminal size), since only relative
- * position/ordering matters here, not exact pixels. */
-export function findDirectionalNeighbor(tree: PaneNode, fromId: string, direction: FocusDirection): string | undefined {
-  const rects = computePaneTreeLayout(tree, 0, 0, 1000, 1000);
-  const from = rects.find((rect) => rect.id === fromId);
-  if (!from) return undefined;
-  const fromCenterX = from.x + from.width / 2;
-  const fromCenterY = from.y + from.height / 2;
-
-  let best: PaneRect | undefined;
-  let bestDistance = Infinity;
-  for (const rect of rects) {
-    if (rect.id === fromId) continue;
-    const dx = rect.x + rect.width / 2 - fromCenterX;
-    const dy = rect.y + rect.height / 2 - fromCenterY;
-    const onSide =
-      (direction === "left" && dx < -1) ||
-      (direction === "right" && dx > 1) ||
-      (direction === "up" && dy < -1) ||
-      (direction === "down" && dy > 1);
-    if (!onSide) continue;
-    const distance = Math.hypot(dx, dy);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = rect;
+/** Greedy word-wrap line count, matching how Ink's `<Text>` wraps content
+ * within a fixed-width container (breaks on spaces, never mid-word) — used
+ * to size the grid above the footer hint correctly instead of assuming it's
+ * always exactly one row. The footer hint only grows as more keybindings get
+ * added, and once it wraps to more than one line at the terminal's actual
+ * width, a hardcoded row count under-counts it: the grid ends up sized as if
+ * there were more room than there actually is, so the last row of whatever
+ * pane renders at the bottom gets drawn underneath the (now taller) footer
+ * and is invisible even though it's logically selected. */
+export function wrappedLineCount(text: string, width: number): number {
+  if (width <= 0) return 1;
+  const words = text.split(" ");
+  let lines = 1;
+  let lineLength = 0;
+  for (const word of words) {
+    if (lineLength === 0) {
+      lineLength = word.length;
+    } else if (lineLength + 1 + word.length <= width) {
+      lineLength += 1 + word.length;
+    } else {
+      lines += 1;
+      lineLength = word.length;
     }
   }
-  return best?.id;
+  return lines;
 }

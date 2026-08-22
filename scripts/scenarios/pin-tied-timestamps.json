@@ -1,0 +1,18 @@
+{
+  "events": [
+    { "type": "event", "event": { "id": "s1", "timestamp": 1000000000301, "category": "network", "label": "sym-301a", "data": {}, "durationMs": 402 } },
+    { "type": "event", "event": { "id": "s2", "timestamp": 1000000000301, "category": "network", "label": "sym-301b", "data": {}, "durationMs": 473 } },
+    { "type": "event", "event": { "id": "s3", "timestamp": 1000000000301, "category": "network", "label": "sym-301c", "data": {}, "durationMs": 473 } },
+    { "type": "event", "event": { "id": "s4", "timestamp": 1000000000515, "category": "network", "label": "sym-515a", "data": {}, "durationMs": 16 } },
+    { "type": "event", "event": { "id": "s5", "timestamp": 1000000000515, "category": "network", "label": "sym-515b", "data": {}, "durationMs": 18 } },
+    { "type": "event", "event": { "id": "s6", "timestamp": 1000000000515, "category": "network", "label": "sym-515c", "data": {}, "durationMs": 24 } },
+    { "type": "event", "event": { "id": "s7", "timestamp": 1000000000515, "category": "network", "label": "sym-515d", "data": {}, "durationMs": 28 } }
+  ],
+  "steps": [
+    {
+      "keys": ["tab", "tab", "k", "k", "k", "K", "p"],
+      "wait": 0.6,
+      "expect": ["API CALLS"]
+    }
+  ]
+}

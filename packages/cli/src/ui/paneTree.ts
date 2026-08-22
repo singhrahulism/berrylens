@@ -1,4 +1,5 @@
 import { DEFAULT_LAYOUT } from "./paneConfig";
+import { computeProportionalSizes } from "./layout";
 
 export type SplitDirection = "row" | "column";
 
@@ -114,5 +115,70 @@ export function adjustWeightForLeaf(node: PaneNode, leafId: string, transform: (
     return { ...node, weights };
   }
   return { ...node, children: node.children.map((child) => adjustWeightForLeaf(child, leafId, transform)) };
+}
+
+export interface PaneRect {
+  id: string;
+  viewId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Recursive geometry over a `PaneNode` tree (Phase 11), reusing
+ * `computeProportionalSizes` for each split — the abstract-coordinate twin
+ * of `Dashboard.tsx`'s nested-Box rendering (kept separate from it since Ink
+ * has no precedent for absolute-positioned rendering in this codebase; this
+ * exists for geometric reasoning, not to be rendered directly). */
+export function computePaneTreeLayout(node: PaneNode, x: number, y: number, width: number, height: number): PaneRect[] {
+  if (node.type === "leaf") return [{ id: node.id, viewId: node.viewId, x, y, width, height }];
+  const sizes = computeProportionalSizes(node.direction === "row" ? width : height, node.weights);
+  const rects: PaneRect[] = [];
+  let offset = 0;
+  node.children.forEach((child, index) => {
+    const size = sizes[index];
+    rects.push(
+      ...(node.direction === "row"
+        ? computePaneTreeLayout(child, x + offset, y, size, height)
+        : computePaneTreeLayout(child, x, y + offset, width, size)),
+    );
+    offset += size;
+  });
+  return rects;
+}
+
+export type FocusDirection = "left" | "right" | "up" | "down";
+
+/** Nearest leaf in the given direction, by center-to-center distance among
+ * candidates that actually lie on that side — computed over an abstract
+ * coordinate space (not the real terminal size), since only relative
+ * position/ordering matters here, not exact pixels. */
+export function findDirectionalNeighbor(tree: PaneNode, fromId: string, direction: FocusDirection): string | undefined {
+  const rects = computePaneTreeLayout(tree, 0, 0, 1000, 1000);
+  const from = rects.find((rect) => rect.id === fromId);
+  if (!from) return undefined;
+  const fromCenterX = from.x + from.width / 2;
+  const fromCenterY = from.y + from.height / 2;
+
+  let best: PaneRect | undefined;
+  let bestDistance = Infinity;
+  for (const rect of rects) {
+    if (rect.id === fromId) continue;
+    const dx = rect.x + rect.width / 2 - fromCenterX;
+    const dy = rect.y + rect.height / 2 - fromCenterY;
+    const onSide =
+      (direction === "left" && dx < -1) ||
+      (direction === "right" && dx > 1) ||
+      (direction === "up" && dy < -1) ||
+      (direction === "down" && dy > 1);
+    if (!onSide) continue;
+    const distance = Math.hypot(dx, dy);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = rect;
+    }
+  }
+  return best?.id;
 }
 

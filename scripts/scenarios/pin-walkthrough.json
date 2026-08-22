@@ -1,0 +1,26 @@
+{
+  "events": [
+    { "type": "event", "event": { "id": "r1", "timestamp": 1000000000000, "category": "network", "label": "POST /discovery/location 200", "data": {} } },
+    { "type": "event", "event": { "id": "n1", "timestamp": 999999999900, "category": "navigation", "label": "nav-before", "data": {} } },
+    { "type": "event", "event": { "id": "n2", "timestamp": 1000000000100, "category": "navigation", "label": "nav-after", "data": {} } },
+    { "type": "event", "event": { "id": "s1", "timestamp": 1000000000500, "category": "state", "label": "state-later", "data": {} } },
+    { "type": "event", "event": { "id": "q1", "timestamp": 1000000000200, "category": "query", "label": "query-after", "data": {} } }
+  ],
+  "steps": [
+    {
+      "keys": ["tab", "tab"],
+      "wait": 0.5,
+      "expect": ["API CALLS"]
+    },
+    {
+      "keys": ["p"],
+      "wait": 0.5,
+      "expect": ["pinned: POST /discovery/location 200"]
+    },
+    {
+      "keys": ["tab"],
+      "wait": 0.5,
+      "expect": ["pinned: POST /discovery/location 200"]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "events": [
+    { "type": "event", "event": { "id": "s1", "timestamp": 1000000000516, "category": "network", "label": "sym-516a", "data": {}, "durationMs": 292 } },
+    { "type": "event", "event": { "id": "s2", "timestamp": 1000000000516, "category": "network", "label": "sym-516b", "data": {}, "durationMs": 293 } },
+    { "type": "event", "event": { "id": "s3", "timestamp": 1000000000515, "category": "network", "label": "sym-515", "data": {}, "durationMs": 304 } },
+    { "type": "event", "event": { "id": "s4", "timestamp": 1000000000824, "category": "network", "label": "sentry-824", "data": {}, "durationMs": 125 } }
+  ],
+  "steps": [
+    {
+      "keys": ["tab", "tab"],
+      "wait": 0.5,
+      "expect": ["API CALLS"]
+    }
+  ]
+}

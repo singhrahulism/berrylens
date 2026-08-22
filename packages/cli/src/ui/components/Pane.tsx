@@ -3,6 +3,7 @@ import { Box, Text } from "ink";
 import type { InspectorEvent } from "@berrylens/protocol";
 import { CATEGORY_COLORS, FOCUSED_BORDER_COLOR, UNFOCUSED_BORDER_COLOR } from "../theme";
 import { computeScrollWindow } from "../layout";
+import { isEventHighlighted, type CrossPaneHighlight } from "../pinSelectors";
 
 export interface PaneProps {
   title: string;
@@ -25,19 +26,18 @@ export interface PaneProps {
   filterActive?: boolean;
   /** How many rows actually fit, computed from the live terminal height by the caller. */
   visibleRows: number;
-  /** Time bounds of the currently selected event (or, if a range is active,
-   * the whole range) in whichever OTHER pane is focused — rows within
-   * [highlightFromTimestamp, highlightToTimestamp] get a `▸` marker, so
-   * scrolling (or range-selecting) in one pane shows what else happened
-   * across that span, across every other pane, without opening the detail
-   * view. Not applied to the focused pane itself (it has its own selection
-   * highlight). `highlightToTimestamp` unset means "at or after", open-ended. */
-  highlightFromTimestamp?: number;
-  highlightToTimestamp?: number;
   /** Settings-menu toggle (`s`) — which edge of the visible window the
    * selection sticks to while scrolling. Defaults to the original bottom-
    * sticking behavior. */
   scrollStickTop?: boolean;
+  /** What drives the ▸ "at or after" / ◆ "pinned" markers — the live
+   * selection (or range) in whichever pane is currently focused, or a
+   * pinned event/range once `p` overrides it (see `crossPaneHighlight`).
+   * The ▸ marker is suppressed in this pane while it's focused UNLESS a pin
+   * is active — a live cursor's own pane has no need to mark itself, but a
+   * pin is a persistent reference decoupled from focus, so it should keep
+   * marking qualifying rows even in the pane you're currently looking at. */
+  highlight: CrossPaneHighlight;
 }
 
 /** Pure/presentational — never touches the event bus directly, driven entirely by props. */
@@ -51,9 +51,8 @@ export function Pane({
   width,
   filterActive,
   visibleRows,
-  highlightFromTimestamp,
-  highlightToTimestamp,
   scrollStickTop = false,
+  highlight,
 }: PaneProps) {
   const total = events.length;
   const selectedAbsoluteIndex = total - 1 - selectedIndexFromEnd;
@@ -88,14 +87,12 @@ export function Pane({
         visible.map((event, index) => {
           const absoluteIndex = start + index;
           const isSelected = focused && absoluteIndex >= rangeLow && absoluteIndex <= rangeHigh;
-          const isOnOrAfter =
-            !focused &&
-            highlightFromTimestamp !== undefined &&
-            event.timestamp >= highlightFromTimestamp &&
-            (highlightToTimestamp === undefined || event.timestamp <= highlightToTimestamp);
+          const suppressHighlight = focused && highlight.pinnedEventId === undefined;
+          const isOnOrAfter = !suppressHighlight && isEventHighlighted(event, highlight);
+          const isPinned = event.id === highlight.pinnedEventId || event.id === highlight.pinnedRangeAnchorId;
           return (
-            <Text key={event.id} color={CATEGORY_COLORS[event.category]} bold={isOnOrAfter} inverse={isSelected}>
-              {isOnOrAfter ? "▸ " : "  "}
+            <Text key={event.id} color={CATEGORY_COLORS[event.category]} bold={isOnOrAfter || isPinned} inverse={isSelected}>
+              {isPinned ? "◆ " : isOnOrAfter ? "▸ " : "  "}
               {formatRow(event)}
             </Text>
           );

@@ -15,6 +15,9 @@ export type Action =
   | { type: "move-selection"; direction: 1 | -1 }
   | { type: "extend-selection"; direction: 1 | -1 }
   | { type: "jump-live" }
+  | { type: "jump-first" }
+  | { type: "jump-highlighted-first" }
+  | { type: "jump-highlighted-last" }
   | { type: "grow" }
   | { type: "shrink" }
   | { type: "zoom-toggle" }
@@ -45,6 +48,7 @@ export type Action =
   | { type: "settings-move"; direction: 1 | -1 }
   | { type: "settings-toggle" }
   | { type: "settings-cancel" }
+  | { type: "pin-toggle" }
   | DetailAction
   | { type: "quit" };
 
@@ -204,7 +208,10 @@ export function resolveAction(mode: Mode, input: string, key: Key): Action | nul
   if (input === "J") return { type: "extend-selection", direction: 1 };
   if (key.upArrow || input === "k") return { type: "move-selection", direction: -1 };
   if (key.downArrow || input === "j") return { type: "move-selection", direction: 1 };
-  if (input === "G") return { type: "jump-live" };
+  if (input === "h") return { type: "jump-live" };
+  if (input === "g") return { type: "jump-first" };
+  if (input === "H") return { type: "jump-highlighted-last" };
+  if (input === "G") return { type: "jump-highlighted-first" };
   if (input === "+" || input === "=") return { type: "grow" };
   if (input === "-" || input === "_") return { type: "shrink" };
   if (input === "z") return { type: "zoom-toggle" };
@@ -216,6 +223,7 @@ export function resolveAction(mode: Mode, input: string, key: Key): Action | nul
   if (input === "D" || input === "d") return { type: "view-dashboard" };
   if (input === "L" || input === "l") return { type: "layout-start" };
   if (input === "s") return { type: "settings-start" };
+  if (input === "p") return { type: "pin-toggle" };
   if (input === "q") return { type: "quit" };
   return null;
 }

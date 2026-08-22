@@ -3,8 +3,11 @@ import { DEFAULT_PANES, TIMELINE_PANE } from "./paneConfig";
 import { isPaneTreeAction, resolveAction } from "./keymap";
 import { findGlobalMatches } from "./views/search";
 import { eventsForPane, focusedPaneDefinition, listForPane, type AppState } from "./appState";
+import { sortEventsChronologically } from "./views/timeline";
 import { collectLeaves } from "./paneTree";
 import { handlePaneTreeAction } from "./paneTreeActions";
+import { handlePinToggle } from "./pinActions";
+import { handleJumpFirst, handleJumpHighlightedFirst, handleJumpHighlightedLast } from "./jumpActions";
 import { LAYOUT_PRESETS, layoutOptions } from "./layoutPresets";
 import { SETTINGS } from "./settings";
 
@@ -52,6 +55,12 @@ export function handleKey(state: AppState, input: string, key: Key): AppState {
     }
     case "jump-live":
       return { ...state, selectedFromEnd: { ...state.selectedFromEnd, [state.focusedPaneId]: 0 }, rangeAnchor: null };
+    case "jump-first":
+      return handleJumpFirst(state);
+    case "jump-highlighted-first":
+      return handleJumpHighlightedFirst(state);
+    case "jump-highlighted-last":
+      return handleJumpHighlightedLast(state);
     case "zoom-toggle":
       return { ...state, zoomedPaneId: state.zoomedPaneId ? null : state.focusedPaneId };
     case "open-detail": {
@@ -118,8 +127,12 @@ export function handleKey(state: AppState, input: string, key: Key): AppState {
       if (!pane) return state;
       // ignore the target pane's own per-pane filter when locating the
       // index — a global search match should always be reachable even if
-      // that pane currently has an unrelated filter active
-      const list = eventsForPane(state.events, pane.categories, undefined);
+      // that pane currently has an unrelated filter active. Sorted the same
+      // way the pane actually renders (`listForPane`, not raw arrival order)
+      // — otherwise the computed from-end offset points at the wrong row
+      // the moment arrival order and timestamp order diverge (concurrent
+      // requests), since `Pane` renders the sorted list, not this one.
+      const list = sortEventsChronologically(eventsForPane(state.events, pane.categories, undefined));
       const absoluteIndex = list.findIndex((event) => event.id === selected.id);
       if (absoluteIndex === -1) return state;
       // prefer an existing instance of this view (the original may have been
@@ -131,12 +144,24 @@ export function handleKey(state: AppState, input: string, key: Key): AppState {
         mode: "detail",
         focusedPaneId: targetId,
         selectedFromEnd: { ...state.selectedFromEnd, [targetId]: list.length - 1 - absoluteIndex },
+        // a range anchored in whatever pane you searched FROM is meaningless
+        // once focus jumps to a different pane — same reset every other
+        // focus-changing action already does (see `paneTreeActions.ts`)
+        rangeAnchor: null,
         searchQuery: "",
         searchCursor: 0,
       };
     }
     case "clear":
-      return { ...state, events: [], rangeAnchor: null };
+      return {
+        ...state,
+        events: [],
+        rangeAnchor: null,
+        pinnedEventId: null,
+        pinnedRangeAnchorId: null,
+        pinnedRangeEventIds: null,
+        pinnedRangeCategories: null,
+      };
     case "view-timeline":
       if (state.view === "timeline") return state;
       return {
@@ -197,6 +222,8 @@ export function handleKey(state: AppState, input: string, key: Key): AppState {
       const chosen = SETTINGS[state.settingsCursor];
       return chosen ? chosen.toggle(state) : state;
     }
+    case "pin-toggle":
+      return handlePinToggle(state);
     default:
       return state;
   }

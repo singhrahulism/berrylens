@@ -6,14 +6,8 @@ import {
   shrinkRatio,
   computeScrollWindow,
   computeNetworkDetailLayout,
-  computePaneTreeLayout,
-  findDirectionalNeighbor,
+  wrappedLineCount,
 } from "./layout";
-import { buildDefaultPaneTree, type PaneLeaf, type PaneNode } from "./paneTree";
-
-function leaf(id: string): PaneLeaf {
-  return { type: "leaf", id, viewId: id };
-}
 
 describe("computeProportionalSizes", () => {
   it("splits evenly when it divides cleanly", () => {
@@ -117,30 +111,26 @@ describe("computeNetworkDetailLayout", () => {
   });
 });
 
-describe("computePaneTreeLayout", () => {
-  it("sizes a row split's children by weight, summing to the full width", () => {
-    const tree: PaneNode = { type: "split", direction: "row", children: [leaf("a"), leaf("b")], weights: [1, 3] };
-    const rects = computePaneTreeLayout(tree, 0, 0, 100, 10);
-    expect(rects.find((r) => r.id === "a")!.width + rects.find((r) => r.id === "b")!.width).toBe(100);
-    expect(rects.every((r) => r.height === 10)).toBe(true);
-  });
-});
-
-describe("findDirectionalNeighbor", () => {
-  it("finds the pane to the right in a row split", () => {
-    const tree: PaneNode = { type: "split", direction: "row", children: [leaf("a"), leaf("b")], weights: [1, 1] };
-    expect(findDirectionalNeighbor(tree, "a", "right")).toBe("b");
-    expect(findDirectionalNeighbor(tree, "b", "left")).toBe("a");
+describe("wrappedLineCount", () => {
+  it("returns 1 for text that fits on one line", () => {
+    expect(wrappedLineCount("short text", 80)).toBe(1);
   });
 
-  it("finds nothing in a direction with no candidate", () => {
-    const tree: PaneNode = { type: "split", direction: "row", children: [leaf("a"), leaf("b")], weights: [1, 1] };
-    expect(findDirectionalNeighbor(tree, "a", "down")).toBeUndefined();
+  it("wraps to a second line once a word would exceed the width", () => {
+    // "aaaa bbbb" is 9 chars, doesn't fit in 8 — "bbbb" wraps down
+    expect(wrappedLineCount("aaaa bbbb", 8)).toBe(2);
   });
 
-  it("picks the nearest pane below in a mixed row/column layout", () => {
-    const tree = buildDefaultPaneTree(); // [nav|state] / api / [query|console]
-    expect(findDirectionalNeighbor(tree, "nav", "down")).toBe("api");
-    expect(findDirectionalNeighbor(tree, "api", "down")).toBe("query");
+  it("wraps to multiple lines for long text at a realistic footer width", () => {
+    const hint =
+      "Tab/Ctrl+arrow focus · j/k scroll · J/K extend range · h/g newest/oldest · H/G newest/oldest highlighted · " +
+      "+/- resize · Ctrl+V/B split · Ctrl+W close pane · Ctrl+N/O reopen closed pane (vert/horiz) · z zoom · " +
+      "l layout · s settings · p pin · enter detail · / filter pane · ? search all · t timeline · c clear · q quit";
+    expect(wrappedLineCount(hint, 78)).toBeGreaterThan(1);
+  });
+
+  it("treats a non-positive width as a single line rather than looping forever", () => {
+    expect(wrappedLineCount("anything", 0)).toBe(1);
+    expect(wrappedLineCount("anything", -5)).toBe(1);
   });
 });

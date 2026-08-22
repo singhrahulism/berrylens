@@ -1,0 +1,22 @@
+{
+  "events": [
+    { "type": "event", "event": { "id": "a1", "timestamp": 1000000000000, "category": "network", "label": "api-t", "data": {} } },
+    { "type": "event", "event": { "id": "a2", "timestamp": 1000000000050, "category": "network", "label": "api-t50", "data": {} } },
+    { "type": "event", "event": { "id": "a3", "timestamp": 1000000000100, "category": "network", "label": "api-t100", "data": {} } },
+    { "type": "event", "event": { "id": "n1", "timestamp": 999999999990, "category": "navigation", "label": "nav-before-range", "data": {} } },
+    { "type": "event", "event": { "id": "n2", "timestamp": 1000000000030, "category": "navigation", "label": "nav-in-range", "data": {} } },
+    { "type": "event", "event": { "id": "n3", "timestamp": 1000000000150, "category": "navigation", "label": "nav-after-range", "data": {} } }
+  ],
+  "steps": [
+    {
+      "keys": ["tab", "tab", "K", "K", "p"],
+      "wait": 0.6,
+      "expect": ["pinned: api-t"]
+    },
+    {
+      "keys": ["tab"],
+      "wait": 0.5,
+      "expect": ["pinned: api-t"]
+    }
+  ]
+}

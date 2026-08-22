@@ -2,27 +2,27 @@ import React from "react";
 import { Box } from "ink";
 import { GRID_PANES, TIMELINE_PANE, paneById } from "../paneConfig";
 import { computeProportionalSizes, visibleRowsForPaneHeight } from "../layout";
-import { eventsForPane, listForPane, type AppState } from "../appState";
+import { listForPane, type AppState } from "../appState";
 import { findLeafViewId, type PaneNode } from "../paneTree";
+import type { CrossPaneHighlight } from "../pinSelectors";
 import { Pane } from "./Pane";
 
 export interface DashboardProps {
   state: AppState;
   gridHeight: number;
   terminalColumns: number;
-  highlightFrom?: number;
-  highlightTo?: number;
+  highlight: CrossPaneHighlight;
 }
 
 /** Whichever of the three mutually-exclusive dashboard views is active
  * (full-screen timeline, a zoomed single pane, or the default multi-pane
  * grid) — never combined, same rule as the detail/search overlays this
  * replaces in `App.tsx`. */
-export function Dashboard({ state, gridHeight, terminalColumns, highlightFrom, highlightTo }: DashboardProps) {
+export function Dashboard({ state, gridHeight, terminalColumns, highlight }: DashboardProps) {
   function renderPane(instanceId: string, viewId: string, width: number, height: number, visibleRows: number) {
     const pane = paneById(GRID_PANES, viewId);
     if (!pane) return null;
-    const list = eventsForPane(state.events, pane.categories, state.appliedFilters[instanceId]);
+    const list = listForPane(state, pane, instanceId);
     const isFocused = state.focusedPaneId === instanceId;
     return (
       <Pane
@@ -36,9 +36,8 @@ export function Dashboard({ state, gridHeight, terminalColumns, highlightFrom, h
         width={width}
         height={height}
         visibleRows={visibleRows}
-        highlightFromTimestamp={isFocused ? undefined : highlightFrom}
-        highlightToTimestamp={isFocused ? undefined : highlightTo}
         scrollStickTop={state.scrollStickTop}
+        highlight={highlight}
       />
     );
   }
@@ -80,6 +79,7 @@ export function Dashboard({ state, gridHeight, terminalColumns, highlightFrom, h
         height={height}
         visibleRows={visibleRows}
         scrollStickTop={state.scrollStickTop}
+        highlight={highlight}
       />
     );
   }

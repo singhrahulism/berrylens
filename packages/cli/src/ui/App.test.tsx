@@ -33,6 +33,14 @@ function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/** The ink-testing-library stdout stub doesn't implement `rows` at all
+ * (only a fixed `columns: 100`), so it's not otherwise settable. Tests that
+ * care about exact visible-row counts need a real value instead of App's
+ * conservative 24-row fallback. */
+function stdoutRows(stdout: { rows?: number }, rows: number): void {
+  Object.defineProperty(stdout, "rows", { value: rows, configurable: true });
+}
+
 describe("App", () => {
   it("renders all default pane titles", async () => {
     const server = new FakeServer();
@@ -56,6 +64,27 @@ describe("App", () => {
     await flush();
 
     expect(lastFrame() ?? "").toContain("GET /users 200");
+  });
+
+  it("displays a pane's events in timestamp order even when they arrive out of order", async () => {
+    // concurrent requests emit on completion, not on start — a request that
+    // started later but finished faster can arrive before one that started
+    // earlier and is still in flight, so arrival order isn't timestamp order
+    const server = new FakeServer();
+    const { lastFrame } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    server.emit("event", makeEvent({ category: "network", label: "started-later-finished-first", timestamp: 200 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "network", label: "started-earlier-still-in-flight", timestamp: 100 }));
+    await flush();
+
+    const frame = lastFrame() ?? "";
+    const earlierIndex = frame.indexOf("started-earlier-still-in-flight");
+    const laterIndex = frame.indexOf("started-later-finished-first");
+    expect(earlierIndex).toBeGreaterThan(-1);
+    expect(laterIndex).toBeGreaterThan(-1);
+    expect(earlierIndex).toBeLessThan(laterIndex); // sorted by timestamp, not arrival order
   });
 
   it("shows history events already buffered on the server at mount", async () => {
@@ -517,6 +546,73 @@ describe("App", () => {
     expect(frame).not.toContain("SEARCH (all categories)");
   });
 
+  it("search-select lands on the searched event even when arrival order and timestamp order disagree", async () => {
+    // simulates two concurrent requests finishing out of start-order — the
+    // second one emitted (arrival order) has the EARLIER timestamp, so the
+    // pane's actual (sorted) render order is the reverse of arrival order.
+    // Timestamps are >500ms apart so the correlation strip's "NEARBY" list
+    // (±500ms) can't smuggle the other event's label into the frame and
+    // mask a wrong-event selection.
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    server.emit("event", makeEvent({ category: "state", label: "search-x", timestamp: 1000 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "state", label: "search-y", timestamp: 100 }));
+    await flush();
+
+    stdin.write("?");
+    await flush();
+    for (const char of "search-y") {
+      stdin.write(char);
+      await flush();
+    }
+    stdin.write("\r");
+    await flush();
+
+    // the generic detail overlay's header is "CATEGORY › label" — asserting
+    // on it specifically (not just "frame contains search-y" anywhere)
+    // proves this is the event actually opened, not just mentioned nearby
+    expect(lastFrame() ?? "").toContain("STATE › search-y");
+  });
+
+  it("selecting a search result in a different pane clears a range anchored in the pane you searched from", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    server.emit("event", makeEvent({ category: "navigation", label: "nav-a" }));
+    await flush();
+    server.emit("event", makeEvent({ category: "navigation", label: "nav-b" }));
+    await flush();
+    for (let i = 0; i < 5; i++) {
+      server.emit("event", makeEvent({ category: "network", label: `api-${i}` }));
+      await flush();
+    }
+
+    // extend a range in NAV / SCREEN (the default-focused pane)
+    stdin.write("K");
+    await flush();
+
+    // search for an API CALLS event and jump to it
+    stdin.write("?");
+    await flush();
+    for (const char of "api-2") {
+      stdin.write(char);
+      await flush();
+    }
+    stdin.write("\r");
+    await flush();
+
+    // back to the grid — API CALLS is now focused; it must not inherit
+    // NAV's leftover range (from-end index 1 there is meaningless here)
+    stdin.write("\x1b");
+    await flush();
+
+    expect(lastFrame() ?? "").not.toContain("(range:");
+  });
+
   it("esc cancels search and returns to the dashboard without selecting anything", async () => {
     const server = new FakeServer();
     const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
@@ -673,6 +769,244 @@ describe("App", () => {
     expect(frame).not.toMatch(/▸ .*api-after-range/);
     expect(frame).toContain("api-before-range"); // shown, just unmarked
     expect(frame).toContain("api-after-range");
+  });
+
+  it("p pins the selected event as the highlight anchor, marking it and surviving a focus change", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    const t = 3_000_000;
+    server.emit("event", makeEvent({ category: "network", label: "api-pinned", timestamp: t }));
+    await flush();
+    server.emit("event", makeEvent({ category: "navigation", label: "nav-before", timestamp: t - 100 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "navigation", label: "nav-after", timestamp: t + 100 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "query", label: "query-after", timestamp: t + 200 }));
+    await flush();
+
+    // focus order is nav -> state -> api -> query -> console; two Tabs from
+    // the default (nav) lands on API CALLS
+    stdin.write("\t");
+    await flush();
+    stdin.write("\t");
+    await flush();
+    stdin.write("p");
+    await flush();
+
+    let frame = lastFrame() ?? "";
+    expect(frame).toMatch(/◆ .*api-pinned/); // marked even while its own pane is focused
+    expect(frame).toMatch(/▸ .*nav-after/);
+    expect(frame).not.toMatch(/▸ .*nav-before/);
+    expect(frame).toContain("pinned: api-pinned");
+
+    // move focus to QUERY CACHE — the anchor should stay on the pinned event,
+    // not follow the cursor, AND the highlight should still show up in
+    // whichever pane you're now focused on, not just the panes you're not
+    // looking at (query-after qualifies at t+200 >= t)
+    stdin.write("\t");
+    await flush();
+
+    frame = lastFrame() ?? "";
+    expect(frame).toMatch(/◆ .*api-pinned/);
+    expect(frame).toMatch(/▸ .*nav-after/);
+    expect(frame).not.toMatch(/▸ .*nav-before/);
+    expect(frame).toMatch(/▸ .*query-after/);
+  });
+
+  it("pinning a range with tied timestamps only marks the two events actually selected, not every same-timestamp sibling", async () => {
+    // several concurrent requests can legitimately finish within the same
+    // millisecond — pinning two specific events that happen to share a
+    // timestamp with unselected siblings must not sweep those siblings in
+    // via a naive timestamp-bounds check (see pinnedRangeEventIds)
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    const t = 5_000_000;
+    server.emit("event", makeEvent({ category: "network", label: "a1", timestamp: t }));
+    await flush();
+    server.emit("event", makeEvent({ category: "network", label: "a2", timestamp: t }));
+    await flush();
+    server.emit("event", makeEvent({ category: "network", label: "a3", timestamp: t })); // will be pinned
+    await flush();
+    server.emit("event", makeEvent({ category: "network", label: "b1", timestamp: t + 100 })); // will be pinned
+    await flush();
+    server.emit("event", makeEvent({ category: "network", label: "b2", timestamp: t + 100 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "network", label: "b3", timestamp: t + 100 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "network", label: "b4", timestamp: t + 100 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "navigation", label: "nav-mid", timestamp: t + 50 }));
+    await flush();
+
+    // sorted ascending: a1, a2, a3, b1, b2, b3, b4 — default cursor is the
+    // most recent (b4); move up to b1, then extend the range to a3
+    stdin.write("\t");
+    await flush();
+    stdin.write("\t");
+    await flush();
+    stdin.write("k");
+    await flush();
+    stdin.write("k");
+    await flush();
+    stdin.write("k");
+    await flush();
+    stdin.write("K");
+    await flush();
+    stdin.write("p");
+    await flush();
+
+    const frame = lastFrame() ?? "";
+    expect(frame).toMatch(/◆ .*\ba3\b/);
+    expect(frame).toMatch(/◆ .*\bb1\b/);
+    // same-timestamp siblings that were never actually selected stay unmarked
+    expect(frame).not.toMatch(/[▸◆] .*\ba1\b/);
+    expect(frame).not.toMatch(/[▸◆] .*\ba2\b/);
+    expect(frame).not.toMatch(/[▸◆] .*\bb2\b/);
+    expect(frame).not.toMatch(/[▸◆] .*\bb3\b/);
+    expect(frame).not.toMatch(/[▸◆] .*\bb4\b/);
+    // a genuinely different pane's event within the time window still
+    // highlights via the ordinary timestamp bounds — the id-set exactness
+    // only applies within the pinned range's own category
+    expect(frame).toMatch(/▸ .*nav-mid/);
+  });
+
+  it("h/g jump to the newest/oldest event, H/G jump to the newest/oldest highlighted event, in the focused pane", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    const t = 6_000_000;
+    server.emit("event", makeEvent({ category: "network", label: "api-a", timestamp: t }));
+    await flush();
+    server.emit("event", makeEvent({ category: "network", label: "api-b", timestamp: t + 100 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "navigation", label: "nav-early", timestamp: t - 50 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "navigation", label: "nav-mid1", timestamp: t + 10 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "navigation", label: "nav-mid2", timestamp: t + 60 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "navigation", label: "nav-late", timestamp: t + 200 }));
+    await flush();
+
+    // pin a range spanning [t, t+100] from API CALLS
+    stdin.write("\t");
+    await flush();
+    stdin.write("\t");
+    await flush();
+    stdin.write("K");
+    await flush();
+    stdin.write("p");
+    await flush();
+
+    // move to NAV / SCREEN — sorted: nav-early, nav-mid1, nav-mid2, nav-late;
+    // nav-mid1/nav-mid2 fall inside [t, t+100], nav-early/nav-late don't
+    stdin.write("\t");
+    await flush();
+    stdin.write("\t");
+    await flush();
+    stdin.write("\t");
+    await flush();
+
+    async function selectedLabel(): Promise<string> {
+      stdin.write("\r");
+      await flush();
+      const frame = lastFrame() ?? "";
+      stdin.write("\x1b"); // esc back to the grid
+      await flush();
+      return frame;
+    }
+
+    stdin.write("g");
+    await flush();
+    expect(await selectedLabel()).toContain("nav-early");
+
+    stdin.write("h");
+    await flush();
+    expect(await selectedLabel()).toContain("nav-late");
+
+    stdin.write("G");
+    await flush();
+    expect(await selectedLabel()).toContain("nav-mid1");
+
+    stdin.write("H");
+    await flush();
+    expect(await selectedLabel()).toContain("nav-mid2");
+  });
+
+  it("p pins a live range (Shift+K/J then p), marking both ends and keeping the whole span highlighted after a focus change", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    const t = 4_000_000;
+    server.emit("event", makeEvent({ category: "network", label: "api-t", timestamp: t }));
+    await flush();
+    server.emit("event", makeEvent({ category: "network", label: "api-t50", timestamp: t + 50 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "network", label: "api-t100", timestamp: t + 100 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "navigation", label: "nav-before-range", timestamp: t - 10 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "navigation", label: "nav-in-range", timestamp: t + 30 }));
+    await flush();
+    server.emit("event", makeEvent({ category: "navigation", label: "nav-after-range", timestamp: t + 150 }));
+    await flush();
+
+    // move to API CALLS, extend a range across all three api-* events, then pin it
+    stdin.write("\t");
+    await flush();
+    stdin.write("\t");
+    await flush();
+    stdin.write("K");
+    await flush();
+    stdin.write("K");
+    await flush();
+    stdin.write("p");
+    await flush();
+
+    let frame = lastFrame() ?? "";
+    expect(frame).toMatch(/◆ .*api-t100/); // both ends of the pinned range marked
+    expect(frame).toMatch(/◆ .*api-t\b/);
+    expect(frame).toContain("pinned: api-t");
+    expect(frame).toMatch(/▸ .*nav-in-range/);
+    expect(frame).not.toMatch(/▸ .*nav-before-range/);
+    expect(frame).not.toMatch(/▸ .*nav-after-range/);
+
+    // move focus away — the pinned range should keep marking the same events
+    stdin.write("\t");
+    await flush();
+
+    frame = lastFrame() ?? "";
+    expect(frame).toMatch(/◆ .*api-t100/);
+    expect(frame).toMatch(/▸ .*nav-in-range/);
+    expect(frame).not.toMatch(/▸ .*nav-before-range/);
+    expect(frame).not.toMatch(/▸ .*nav-after-range/);
+  });
+
+  it("pressing p again on the pinned row unpins it", async () => {
+    const server = new FakeServer();
+    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    await flush();
+
+    server.emit("event", makeEvent({ category: "network", label: "api-toggle" }));
+    await flush();
+
+    stdin.write("\t");
+    await flush();
+    stdin.write("\t");
+    await flush();
+    stdin.write("p");
+    await flush();
+    expect(lastFrame() ?? "").toContain("pinned:");
+
+    stdin.write("p");
+    await flush();
+    expect(lastFrame() ?? "").not.toContain("pinned:");
   });
 
   it("plain j/k after a range selection collapses back to a single selection", async () => {
@@ -909,7 +1243,12 @@ describe("App", () => {
 
   it("Ctrl+O reopens a closed default view horizontally instead of vertically (direction is honored, not always Ctrl+N's row)", async () => {
     const server = new FakeServer();
-    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    const { lastFrame, stdin, stdout } = render(<App server={server} metroTarget={null} />);
+    // the ink-testing-library stdout stub doesn't implement `rows` at all, so
+    // App falls back to a conservative 24 — too tight for a column-split
+    // sub-pane plus the (correctly, now multi-line) footer without visually
+    // corrupting; a real terminal running a multi-pane TUI is rarely that short
+    stdoutRows(stdout, 28);
     await flush();
 
     stdin.write("\t");
@@ -1022,7 +1361,8 @@ describe("App", () => {
 
   it("scroll stickiness defaults to top: the cursor pins to the first visible row, revealing newer events below it instead of only older ones above", async () => {
     const server = new FakeServer();
-    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    const { lastFrame, stdin, stdout } = render(<App server={server} metroTarget={null} />);
+    stdoutRows(stdout, 28); // enough room for a 5-row visible window, see stdoutRows
     await flush();
 
     for (let i = 0; i < 30; i += 1) {
@@ -1046,7 +1386,8 @@ describe("App", () => {
 
   it("toggling stickiness to Bottom restores the old behavior: the cursor pins to the last visible row", async () => {
     const server = new FakeServer();
-    const { lastFrame, stdin } = render(<App server={server} metroTarget={null} />);
+    const { lastFrame, stdin, stdout } = render(<App server={server} metroTarget={null} />);
+    stdoutRows(stdout, 28); // enough room for a 5-row visible window, see stdoutRows
     await flush();
 
     for (let i = 0; i < 30; i += 1) {

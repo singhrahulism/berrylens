@@ -1,0 +1,21 @@
+{
+  "events": [
+    { "type": "event", "event": { "id": "a1", "timestamp": 1000000000000, "category": "network", "label": "api-a", "data": {} } },
+    { "type": "event", "event": { "id": "a2", "timestamp": 1000000000100, "category": "network", "label": "api-b", "data": {} } },
+    { "type": "event", "event": { "id": "n1", "timestamp": 999999999950, "category": "navigation", "label": "nav-early", "data": {} } },
+    { "type": "event", "event": { "id": "n2", "timestamp": 1000000000010, "category": "navigation", "label": "nav-mid1", "data": {} } },
+    { "type": "event", "event": { "id": "n3", "timestamp": 1000000000060, "category": "navigation", "label": "nav-mid2", "data": {} } },
+    { "type": "event", "event": { "id": "n4", "timestamp": 1000000000200, "category": "navigation", "label": "nav-late", "data": {} } }
+  ],
+  "steps": [
+    {
+      "keys": ["tab", "tab", "K", "p", "tab", "tab", "tab"],
+      "wait": 0.6,
+      "expect": ["NAV / SCREEN"]
+    },
+    { "keys": ["g", "enter"], "wait": 0.3, "expect": ["nav-early"] },
+    { "keys": ["esc", "h", "enter"], "wait": 0.3, "expect": ["nav-late"] },
+    { "keys": ["esc", "G", "enter"], "wait": 0.3, "expect": ["nav-mid1"] },
+    { "keys": ["esc", "H", "enter"], "wait": 0.3, "expect": ["nav-mid2"] }
+  ]
+}

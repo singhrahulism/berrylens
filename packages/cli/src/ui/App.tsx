@@ -3,9 +3,10 @@ import { Box, Text, useApp, useInput, useStdin, useStdout } from "ink";
 import type { HelloMessage, InspectorEvent } from "@berrylens/protocol";
 import type { ConnectionInfo, InspectorServer } from "../server";
 import type { MetroTarget } from "../metroPairing";
-import { FOOTER_ROWS, STATUS_BAR_ROWS, visibleRowsForSearch } from "./layout";
+import { STATUS_BAR_ROWS, visibleRowsForSearch, wrappedLineCount } from "./layout";
 import { isDetailAction, resolveAction, type DetailHandle } from "./keymap";
 import { focusedPaneDefinition, hasDiff, initialState, listForPane, positiveOr } from "./appState";
+import { crossPaneHighlight } from "./pinSelectors";
 import { reducer } from "./reducer";
 import { performDetailCurlExport, performDetailDump } from "./detailKeyEffects";
 import { Dashboard } from "./components/Dashboard";
@@ -24,6 +25,19 @@ const STATUS_MESSAGE_DURATION_MS = 4000;
 const ERROR_FLASH_DURATION_MS = 2500;
 const DEFAULT_TERMINAL_ROWS = 24;
 const DEFAULT_TERMINAL_COLUMNS = 80;
+
+/** The exact string the footer renders — kept as one source of truth so the
+ * `wrappedLineCount` sizing check and the actual `<Text>` content can never
+ * drift apart (see `wrappedLineCount`'s doc comment for why that matters). */
+function footerHintText(view: "dashboard" | "timeline"): string {
+  return (
+    "Tab/Ctrl+arrow focus · j/k scroll · J/K extend range · h/g newest/oldest · H/G newest/oldest highlighted · " +
+    "+/- resize · Ctrl+V/B split · Ctrl+W close pane · Ctrl+N/O reopen closed pane (vert/horiz) · z zoom · " +
+    "l layout · s settings · p pin · enter detail · / filter pane · ? search all · " +
+    (view === "timeline" ? "d dashboard" : "t timeline") +
+    " · c clear · q quit"
+  );
+}
 
 export interface AppProps {
   server: Pick<InspectorServer, "on" | "off" | "getHistory">;
@@ -98,14 +112,7 @@ export function App({ server, metroTarget }: AppProps) {
   const focusedPane = focusedPaneDefinition(state);
   const focusedList = focusedPane ? listForPane(state, focusedPane, state.focusedPaneId) : [];
   const detailEvent = focusedList[focusedList.length - 1 - (state.selectedFromEnd[state.focusedPaneId] ?? 0)];
-  const rangeAnchorEvent =
-    state.rangeAnchor !== null ? focusedList[focusedList.length - 1 - state.rangeAnchor] : undefined;
-  // when a range is active, other panes get both bounds (inclusive); otherwise
-  // just the single selected timestamp, open-ended (existing "at or after" behavior)
-  const highlightFrom =
-    rangeAnchorEvent && detailEvent ? Math.min(rangeAnchorEvent.timestamp, detailEvent.timestamp) : detailEvent?.timestamp;
-  const highlightTo =
-    rangeAnchorEvent && detailEvent ? Math.max(rangeAnchorEvent.timestamp, detailEvent.timestamp) : undefined;
+  const highlight = crossPaneHighlight(state);
 
   // `??` alone isn't enough here: some terminals/ptys report rows/columns as
   // `0` (not `undefined`) transiently (e.g. mid-resize), which `??` doesn't
@@ -113,12 +120,18 @@ export function App({ server, metroTarget }: AppProps) {
   // entire app to nothing rather than falling back sensibly.
   const terminalRows = positiveOr(stdout?.rows, DEFAULT_TERMINAL_ROWS);
   const terminalColumns = positiveOr(stdout?.columns, DEFAULT_TERMINAL_COLUMNS);
-  const gridHeight = Math.max(1, terminalRows - STATUS_BAR_ROWS - FOOTER_ROWS);
 
   const inDetailMode = state.mode === "detail" && detailEvent;
   const inSearchMode = state.mode === "search";
   const inLayoutMode = state.mode === "layout";
   const inSettingsMode = state.mode === "settings";
+  // the footer (and therefore its actual row count) only ever renders
+  // alongside the grid, in these same two remaining modes
+  const footerVisible = !inDetailMode && !inSearchMode && !inLayoutMode && !inSettingsMode;
+  const footerText = state.mode === "filter" ? `/ ${state.filterText}` : footerHintText(state.view);
+  const footerRows = footerVisible ? wrappedLineCount(footerText, Math.max(1, terminalColumns - 2)) : 0;
+  const gridHeight = Math.max(1, terminalRows - STATUS_BAR_ROWS - footerRows);
+
   const DetailComponent =
     detailEvent?.category === "network"
       ? NetworkDetailOverlay
@@ -145,6 +158,7 @@ export function App({ server, metroTarget }: AppProps) {
         statusMessage={state.statusMessage}
         errorCount={errorCount}
         errorFlashActive={state.errorFlashActive}
+        pinnedLabel={highlight.statusLabel}
       />
       {inSearchMode ? (
         <SearchOverlay
@@ -173,25 +187,11 @@ export function App({ server, metroTarget }: AppProps) {
           allEvents={state.events}
         />
       ) : (
-        <Dashboard
-          state={state}
-          gridHeight={gridHeight}
-          terminalColumns={terminalColumns}
-          highlightFrom={highlightFrom}
-          highlightTo={highlightTo}
-        />
+        <Dashboard state={state} gridHeight={gridHeight} terminalColumns={terminalColumns} highlight={highlight} />
       )}
-      {!inDetailMode && !inSearchMode && !inLayoutMode && !inSettingsMode && (
+      {footerVisible && (
         <Box paddingX={1}>
-          {state.mode === "filter" ? (
-            <Text>/ {state.filterText}</Text>
-          ) : (
-            <Text dimColor>
-              Tab/Ctrl+arrow focus · j/k scroll · J/K extend range · +/- resize · Ctrl+V/B split · Ctrl+W close pane ·
-              Ctrl+N/O reopen closed pane (vert/horiz) · z zoom · l layout · s settings · enter detail · / filter pane ·
-              ? search all · {state.view === "timeline" ? " d dashboard" : " t timeline"} · c clear · q quit
-            </Text>
-          )}
+          <Text dimColor={state.mode !== "filter"}>{footerText}</Text>
         </Box>
       )}
     </Box>

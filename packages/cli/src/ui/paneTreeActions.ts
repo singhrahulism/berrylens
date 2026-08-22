@@ -1,8 +1,8 @@
 import { DEFAULT_PANES } from "./paneConfig";
-import { findDirectionalNeighbor, growRatio, shrinkRatio } from "./layout";
+import { growRatio, shrinkRatio } from "./layout";
 import { focusedPaneDefinition, type AppState } from "./appState";
 import type { PaneTreeAction } from "./keymap";
-import { adjustWeightForLeaf, closePane, collectLeaves, nextInstanceId, splitPane } from "./paneTree";
+import { adjustWeightForLeaf, closePane, collectLeaves, findDirectionalNeighbor, nextInstanceId, splitPane } from "./paneTree";
 
 /** Every keyboard-driven transition that only touches `paneTree`/focus/zoom
  * — split out from `keyHandler.ts` (Phase 11) purely to keep both files
